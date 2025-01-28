@@ -1,0 +1,59 @@
+services:
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    command: [
+      "--tlsMode", "requireTLS",
+      "--tlsCertificateKeyFile", "/certs/mongodb.pem", # Path to the server cert+key
+      "--tlsCAFile", "/certs/dev-ca.pem" # Path to the CA certificate
+    ]
+    volumes:
+      - mongo-data:/data/db
+      - ./dev-certs:/certs:ro
+
+  local-kms:
+    image: nsmithuk/local-kms:latest
+    container_name: local-kms
+    ports:
+      - "8080:8080"
+    environment:
+      AWS_REGION: ${AWS_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+  # frontend:
+  #   build:
+  #     context: ./ui
+  #     dockerfile: Dockerfile
+  #   container_name: frontend
+  #   ports:
+  #     - "3000:3000"
+  #   stdin_open: true
+  #   tty: true
+  #   environment:
+  #     - REACT_APP_BACKEND_URL=http://localhost:5000
+  #   depends_on:
+  #     - backend
+
+  backend:
+    build:
+      context: ./ca
+      dockerfile: Dockerfile
+    container_name: backend
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongo:27017
+      - KMS_ENDPOINT=http://local-kms:8080
+    depends_on:
+      - mongo
+      - local-kms
+
+volumes:
+  mongo-data:
+    driver: local
