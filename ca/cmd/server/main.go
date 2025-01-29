@@ -1,6 +1,6 @@
 package main
 
-import "ca/cmd/server"
+import "ca/internal/server"
 
 func main() {
 	server.InitServer()

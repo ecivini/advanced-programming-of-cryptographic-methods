@@ -6,9 +6,9 @@ import (
 
 // GetPort retrieves the server port from the environment or defaults to 3000.
 func GetPort() string {
-	port := os.Getenv("PORT")
+	port := os.Getenv("CA_PORT")
 	if port == "" {
-		port = "3000"
+		port = "5000"
 	}
 	return ":" + port
 }

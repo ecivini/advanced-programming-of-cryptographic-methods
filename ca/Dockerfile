@@ -13,7 +13,7 @@ COPY . ./
 # Build Go Binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ./server ./cmd/server/main.go;
 
-ARG API_PORT
-EXPOSE $API_PORT
+ARG CA_PORT
+EXPOSE $CA_PORT
 
 CMD ["/go/src/app/server"]

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"ca/internal/config"
 )
 
 // InitServer initializes and starts the HTTP server.
@@ -15,7 +17,7 @@ func InitServer() {
 	mux.HandleFunc("/hsm/sign", SignWithHSMHandler)
 
 	// Start the server
-	port := ":3000"
+	port := config.GetPort()
 	fmt.Println("Starting CA server on", port)
 	err := http.ListenAndServe(port, mux)
 	if err != nil {

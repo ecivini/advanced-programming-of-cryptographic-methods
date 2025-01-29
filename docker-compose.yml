@@ -50,6 +50,7 @@ services:
     environment:
       - MONGO_URI=mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@mongo:27017
       - KMS_ENDPOINT=http://local-kms:8080
+      - CA_PORT=5000
     depends_on:
       - mongo
       - local-kms
