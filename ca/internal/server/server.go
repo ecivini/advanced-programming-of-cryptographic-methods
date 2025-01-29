@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"ca/internal/config"
+
+	"ca/internal/server/handlers"
 )
 
 // InitServer initializes and starts the HTTP server.
@@ -13,8 +15,11 @@ func InitServer() {
 	mux := http.NewServeMux()
 
 	// Register handlers
-	mux.HandleFunc("/health", HealthHandler)
-	mux.HandleFunc("/hsm/sign", SignWithHSMHandler)
+	certificateRouter := handlers.BuildCertificateHandler()
+	mux.Handle("/v1/certificate/", http.StripPrefix("/v1/certificate", certificateRouter))
+
+	healthRouter := handlers.BuildHealthHandler()
+	mux.Handle("/v1/", http.StripPrefix("/v1", healthRouter))
 
 	// Start the server
 	port := config.GetPort()
