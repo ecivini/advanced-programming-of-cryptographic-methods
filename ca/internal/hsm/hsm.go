@@ -47,6 +47,21 @@ func CreateRootKey(hsm *kms.Client) *string {
 	return result.KeyMetadata.KeyId
 }
 
+func SignMessage(hsm *kms.Client, keyId *string, message []byte, algorithm types.SigningAlgorithmSpec) []byte {
+	signInput := &kms.SignInput{
+		KeyId:            keyId,
+		Message:          message,
+		SigningAlgorithm: algorithm,
+	}
+
+	signOutput, err := hsm.Sign(context.Background(), signInput)
+	if err != nil {
+		log.Fatalf("[-] Unable to sign message: %v", err)
+	}
+
+	return signOutput.Signature
+}
+
 func ConnectToHSM() *kms.Client {
 	fmt.Println("[+] Connecting to HSM ...")
 
