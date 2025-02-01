@@ -6,14 +6,23 @@ import (
 	"net/http"
 
 	"ca/internal/config"
-	"ca/internal/hsm"
+	hsmSvc "ca/internal/hsm"
 	"ca/internal/server/handlers"
 )
 
 // InitServer initializes and starts the HTTP server.
 func InitServer() {
 	// Create connection to the HSM
-	hsm.ConnectToHSM()
+	hsm := hsmSvc.ConnectToHSM()
+
+	rootKeyId := hsmSvc.GetRootKeyId(hsm)
+
+	// TODO: Handle root certificate creation
+	if rootKeyId == nil {
+		rootKeyId = hsmSvc.CreateRootKey(hsm)
+	}
+
+	fmt.Println("[+] Root key id: ", *rootKeyId)
 
 	// Creating server
 	mux := http.NewServeMux()
