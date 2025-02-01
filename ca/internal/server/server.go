@@ -1,16 +1,37 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"ca/internal/config"
 	"ca/internal/server/handlers"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // InitServer initializes and starts the HTTP server.
 func InitServer(hsmCfg config.HsmConfig) {
+	// Connect to db
+	fmt.Println("[+] Connecting to database...")
+	mongoUri := os.Getenv("MONGO_URI")
+	db, err := mongo.Connect(options.Client().ApplyURI(mongoUri))
+	if err != nil {
+		log.Fatalf("[-] Unable to connect to the database: %v", err)
+	}
+	fmt.Println("[+] Connected to database.")
+
+	// Close db connection
+	defer func() {
+		if err = db.Disconnect(context.Background()); err != nil {
+			panic(err)
+		}
+	}()
+
 	// Creating server
 	mux := http.NewServeMux()
 
@@ -26,7 +47,7 @@ func InitServer(hsmCfg config.HsmConfig) {
 	fullAddress := serverCfg.Host + ":" + serverCfg.Port
 
 	fmt.Println("[+] Starting CA server on ", fullAddress)
-	err := http.ListenAndServe(fullAddress, mux)
+	err = http.ListenAndServe(fullAddress, mux)
 	if err != nil {
 		log.Fatalf("[-] Failed to start server: %v", err)
 	}
