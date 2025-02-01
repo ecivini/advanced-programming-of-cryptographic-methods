@@ -6,24 +6,11 @@ import (
 	"net/http"
 
 	"ca/internal/config"
-	hsmSvc "ca/internal/hsm"
 	"ca/internal/server/handlers"
 )
 
 // InitServer initializes and starts the HTTP server.
-func InitServer() {
-	// Create connection to the HSM
-	hsm := hsmSvc.ConnectToHSM()
-
-	rootKeyId := hsmSvc.GetRootKeyId(hsm)
-
-	// TODO: Handle root certificate creation
-	if rootKeyId == nil {
-		rootKeyId = hsmSvc.CreateRootKey(hsm)
-	}
-
-	fmt.Println("[+] Root key id: ", *rootKeyId)
-
+func InitServer(hsmCfg config.HsmConfig) {
 	// Creating server
 	mux := http.NewServeMux()
 
@@ -35,9 +22,8 @@ func InitServer() {
 	mux.Handle("/v1/", http.StripPrefix("/v1", healthRouter))
 
 	// Start the server
-	port := config.GetPort()
-	host := config.GetHost()
-	fullAddress := host + ":" + port
+	serverCfg := config.GetServerConfig()
+	fullAddress := serverCfg.Host + ":" + serverCfg.Port
 
 	fmt.Println("[+] Starting CA server on ", fullAddress)
 	err := http.ListenAndServe(fullAddress, mux)
