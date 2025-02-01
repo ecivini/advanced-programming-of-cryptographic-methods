@@ -21,7 +21,7 @@ func main() {
 	// Start server
 	hsmCfg := config.HsmConfig{
 		Hsm:       hsm,
-		RootKeyId: *rootKeyId,
+		RootKeyId: rootKeyId,
 	}
 
 	server.InitServer(hsmCfg)

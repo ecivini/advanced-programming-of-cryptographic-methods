@@ -39,6 +39,9 @@ func InitServer(hsmCfg config.HsmConfig) {
 	certificateRouter := handlers.BuildCertificateHandler()
 	mux.Handle("/v1/certificate/", http.StripPrefix("/v1/certificate", certificateRouter))
 
+	infoRouter := handlers.BuildInfoHandler(&hsmCfg)
+	mux.Handle("/v1/info/", http.StripPrefix("/v1/info", infoRouter))
+
 	healthRouter := handlers.BuildHealthHandler()
 	mux.Handle("/v1/", http.StripPrefix("/v1", healthRouter))
 

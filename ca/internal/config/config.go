@@ -13,7 +13,7 @@ type ServerConfig struct {
 
 type HsmConfig struct {
 	Hsm       *kms.Client
-	RootKeyId string
+	RootKeyId *string
 }
 
 func GetServerConfig() ServerConfig {

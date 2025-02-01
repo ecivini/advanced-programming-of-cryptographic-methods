@@ -47,6 +47,20 @@ func CreateRootKey(hsm *kms.Client) *string {
 	return result.KeyMetadata.KeyId
 }
 
+func GetPublicKey(hsm *kms.Client, keyId *string) []byte {
+	publicKeyInput := &kms.GetPublicKeyInput{
+		KeyId: keyId,
+	}
+
+	publicKeyOutput, err := hsm.GetPublicKey(context.Background(), publicKeyInput)
+	if err != nil {
+		fmt.Println("[-] Key does not exist: ", keyId)
+		return nil
+	}
+
+	return publicKeyOutput.PublicKey
+}
+
 func SignMessage(hsm *kms.Client, keyId *string, message []byte, algorithm types.SigningAlgorithmSpec) []byte {
 	signInput := &kms.SignInput{
 		KeyId:            keyId,
