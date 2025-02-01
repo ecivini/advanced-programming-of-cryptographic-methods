@@ -6,12 +6,16 @@ import (
 	"net/http"
 
 	"ca/internal/config"
-
+	"ca/internal/hsm"
 	"ca/internal/server/handlers"
 )
 
 // InitServer initializes and starts the HTTP server.
 func InitServer() {
+	// Create connection to the HSM
+	hsm.ConnectToHSM()
+
+	// Creating server
 	mux := http.NewServeMux()
 
 	// Register handlers
@@ -23,9 +27,12 @@ func InitServer() {
 
 	// Start the server
 	port := config.GetPort()
-	fmt.Println("Starting CA server on", port)
-	err := http.ListenAndServe(port, mux)
+	host := config.GetHost()
+	fullAddress := host + ":" + port
+
+	fmt.Println("[+] Starting CA server on ", fullAddress)
+	err := http.ListenAndServe(fullAddress, mux)
 	if err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Fatalf("[-] Failed to start server: %v", err)
 	}
 }
