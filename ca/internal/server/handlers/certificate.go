@@ -11,6 +11,11 @@ func BuildCertificateHandler() *http.ServeMux {
 	router := http.NewServeMux()
 
 	router.HandleFunc("/create", CreateCertificateHandler)
+	router.HandleFunc("/revoke", RevokeCertificateHandler)
+	router.HandleFunc("/get", GetCertificateHandler)
+	router.HandleFunc("/validate", ValidateCertificateHandler)
+	router.HandleFunc("/crl", GetCRLHandler)
+	router.HandleFunc("/renew", RenewCertificateHandler)
 
 	return router
 }
@@ -26,9 +31,10 @@ func CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//Cenerate certificate
 	certificate, err := GenerateCertificate(requestBody.Email, []byte(requestBody.PublicKey))
 	if err != nil {
-		http.Error(w, "Unable to generate certificate", http.StatusInternalServerError)
+		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
 		return
 	}
 
@@ -36,7 +42,7 @@ func CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(certificate)
 }
 
-func RevokeCertificate(w http.ResponseWriter, r *http.Request) {
+func RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SerialNumber string `json:"serial_number"`
 	}
@@ -45,7 +51,11 @@ func RevokeCertificate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//Add logic to revoke certificate
+	//Revoke certificate
+	if err := db.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
+		http.Error(w, "Failed to revoke certificate", http.StatusInternalServerError)
+		return
+	}
 
 	//Response
 	response := map[string]string{
@@ -62,19 +72,24 @@ func GetCertificateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//Get certificate
 	certificate, err := db.GetCertificateByID(serialNumber)
 	if err != nil {
-		http.Error(w, "Certificate not found", http.StatusNotFound)
+		http.Error(w, "Failed to get certificate", http.StatusInternalServerError)
 		return
 	}
 
+	response := map[string]string{
+		"certificate": certificate.ID.Hex(), //non va l'id, lo so, è solo un placeholder per fare andare il codice
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(certificate)
+	json.NewEncoder(w).Encode(response)
 }
 
-func ValidateCertificate(w http.ResponseWriter, r *http.Request) {
+func ValidateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
-		Certificate string `json:"certificate"` // Base64 encoded certificate
+		Certificate string `json:"certificate"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -94,20 +109,29 @@ func ValidateCertificate(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func GetCRL(w http.ResponseWriter, r *http.Request) {
-	// TODO: Fetch the current CRL from the database or regenerate it.
+func GetCRLHandler(w http.ResponseWriter, r *http.Request) {
 
-	crl := "Current_CR_L_Content" // Placeholder
+	crl, err := db.GetCRL()
+	if err != nil {
+		http.Error(w, "Failed to get CRL", http.StatusInternalServerError)
+		return
+	}
+
+	crlJSON, err := json.Marshal(crl)
+	if err != nil {
+		http.Error(w, "Failed to marshal CRL", http.StatusInternalServerError)
+		return
+	}
 
 	response := map[string]string{
-		"crl": crl,
+		"crl": string(crlJSON),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-func RenewCertificate(w http.ResponseWriter, r *http.Request) {
+func RenewCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SerialNumber string `json:"serial_number"`
 	}
@@ -117,12 +141,14 @@ func RenewCertificate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Verify the certificate's serial number and generate a renewed certificate.
-	renewedCertificate := "Renewed_Certificate_Content" // Placeholder
+	// TODO: Generate a renewed certificate
+	if err := db.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
+		http.Error(w, "Failed to renew certificate", http.StatusInternalServerError)
+		return
+	}
 
 	response := map[string]string{
-		"message":     "Certificate renewed successfully",
-		"certificate": renewedCertificate,
+		"message": "Certificate renewed successfully",
 	}
 
 	w.Header().Set("Content-Type", "application/json")

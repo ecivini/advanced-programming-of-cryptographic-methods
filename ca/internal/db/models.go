@@ -1,6 +1,10 @@
 package db
 
-import "go.mongodb.org/mongo-driver/bson/primitive"
+import (
+	"io"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type RevocatedCertificate struct {
 	ID             primitive.ObjectID `bson:"_id,omitempty"`
@@ -18,4 +22,13 @@ type IssuedCertificate struct {
 	VerifiedSignature []byte             `bson:"signature,omitempty"`
 	ValidFrom         primitive.DateTime `bson:"valid_from,omitempty"`
 	ValidUntil        primitive.DateTime `bson:"valid_until,omitempty"`
+}
+
+func (i *IssuedCertificate) Sign(rand io.Reader, template *IssuedCertificate, parent *IssuedCertificate, pub interface{}, priv interface{}) ([]byte, error) {
+	// Add logic to sign the certificate
+	panic("unimplemented")
+}
+
+func GenerateChallenge() string {
+	panic("unimplemented")
 }
