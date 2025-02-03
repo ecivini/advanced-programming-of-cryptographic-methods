@@ -52,3 +52,57 @@ func SaveRevokedCertificate(revoked RevocatedCertificate) error {
 	_, err := collection.InsertOne(context.Background(), revoked)
 	return err
 }
+
+func GetRevokedCertificateByID(id string) (*RevocatedCertificate, error) {
+	collection := Client.Database("ca").Collection("revoked_certificates")
+	objID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return nil, err
+	}
+
+	var revoked RevocatedCertificate
+	err = collection.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&revoked)
+	if err != nil {
+		return nil, err
+	}
+
+	return &revoked, nil
+}
+
+func RevokeCertificateByID(serialNumber string) error {
+	collection := Client.Database("ca").Collection("issued_certificates")
+	_, err :=
+		collection.UpdateOne(
+			context.Background(),
+			bson.M{"certificate_id": serialNumber},
+			bson.M{"$set": bson.M{"revocation_date": time.Now().Format(time.RFC3339)}},
+		)
+	return err
+}
+
+func GetCRL() ([]RevocatedCertificate, error) {
+	collection := Client.Database("ca").Collection("revoked_certificates")
+	cursor, err := collection.Find(context.Background(), bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var revoked []RevocatedCertificate
+	if err = cursor.All(context.Background(), &revoked); err != nil {
+		return nil, err
+	}
+
+	return revoked, nil
+}
+
+func RenewCertificate(serialNumber string) error {
+	collection := Client.Database("ca").Collection("issued_certificates")
+	_, err :=
+		collection.UpdateOne(
+			context.Background(),
+			bson.M{"certificate_id": serialNumber},
+			bson.M{"$set": bson.M{"valid_from": time.Now().Format(time.RFC3339)}},
+		)
+	return err
+}
