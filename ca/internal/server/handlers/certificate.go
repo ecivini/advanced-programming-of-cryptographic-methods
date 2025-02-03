@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"ca/internal/db"
 )
 
 func BuildCertificateHandler() *http.ServeMux {
@@ -15,7 +17,8 @@ func BuildCertificateHandler() *http.ServeMux {
 
 func CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
-		CSR string `json:"csr"`
+		Email     string `json:"email"`
+		PublicKey string `json:"public_key"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -23,17 +26,14 @@ func CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//TODO: Parse and validate the CSR, then generate the certificate.
-	//Use the private key from the HSM to sign the certificate.
-	certificate := "Generated_Certificate_Content" // Placeholder
-
-	response := map[string]string{
-		"message":     "Certificate created successfully",
-		"certificate": certificate,
+	certificate, err := GenerateCertificate(requestBody.Email, []byte(requestBody.PublicKey))
+	if err != nil {
+		http.Error(w, "Unable to generate certificate", http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(certificate)
 }
 
 func RevokeCertificate(w http.ResponseWriter, r *http.Request) {
@@ -55,22 +55,21 @@ func RevokeCertificate(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func GetCertificate(w http.ResponseWriter, r *http.Request) {
+func GetCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	serialNumber := r.URL.Query().Get("serial_number")
 	if serialNumber == "" {
 		http.Error(w, "Serial number is required", http.StatusBadRequest)
 		return
 	}
 
-	// TODO: Retrieve the certificate from the database using the serial number.
-	certificate := "Retrieved_Certificate_Content" // Placeholder
-
-	response := map[string]string{
-		"certificate": certificate,
+	certificate, err := db.GetCertificateByID(serialNumber)
+	if err != nil {
+		http.Error(w, "Certificate not found", http.StatusNotFound)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(certificate)
 }
 
 func ValidateCertificate(w http.ResponseWriter, r *http.Request) {

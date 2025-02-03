@@ -45,12 +45,12 @@ func InitServer(hsmCfg config.HsmConfig) {
 	healthRouter := handlers.BuildHealthHandler()
 	mux.Handle("/v1/", http.StripPrefix("/v1", healthRouter))
 
-	//Add routes for certificate management
-	certificateRouter.HandleFunc("/revoke", handlers.RevokeCertificate)
-	certificateRouter.HandleFunc("/get", handlers.GetCertificate)
-	certificateRouter.HandleFunc("/renew", handlers.RenewCertificate)
-	certificateRouter.HandleFunc("/list", handlers.GetCRL)
-	certificateRouter.HandleFunc("/validate", handlers.ValidateCertificate)
+	// //Add routes for certificate management (non so se vada qui o nell'handler del certificato)
+	// certificateRouter.HandleFunc("/revoke", handlers.RevokeCertificate)
+	// certificateRouter.HandleFunc("/get", handlers.GetCertificateHandler)
+	// certificateRouter.HandleFunc("/renew", handlers.RenewCertificate)
+	// certificateRouter.HandleFunc("/list", handlers.GetCRL)
+	// certificateRouter.HandleFunc("/validate", handlers.ValidateCertificate)
 
 	// Start the server
 	serverCfg := config.GetServerConfig()
