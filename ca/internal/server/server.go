@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"ca/internal/config"
+	"ca/internal/hsm"
 	"ca/internal/server/handlers"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -15,7 +16,7 @@ import (
 )
 
 // InitServer initializes and starts the HTTP server.
-func InitServer(hsmCfg config.HsmConfig) {
+func InitServer(hsm *hsm.Hsm) {
 	// Connect to db
 	fmt.Println("[+] Connecting to database...")
 	mongoUri := os.Getenv("MONGO_URI")
@@ -39,8 +40,9 @@ func InitServer(hsmCfg config.HsmConfig) {
 	certificateRouter := handlers.BuildCertificateHandler()
 	mux.Handle("/v1/certificate/", http.StripPrefix("/v1/certificate", certificateRouter))
 
-	infoRouter := handlers.BuildInfoHandler(&hsmCfg)
-	mux.Handle("/v1/info/", http.StripPrefix("/v1/info", infoRouter))
+	infoHandler := handlers.BuildInfoHandler(hsm)
+	infoHandler.RegisterRoutes()
+	mux.Handle("/v1/info/", http.StripPrefix("/v1/info", infoHandler.Router))
 
 	healthRouter := handlers.BuildHealthHandler()
 	mux.Handle("/v1/", http.StripPrefix("/v1", healthRouter))
