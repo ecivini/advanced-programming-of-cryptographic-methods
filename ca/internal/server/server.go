@@ -41,11 +41,10 @@ func InitServer(hsm *hsm.Hsm) {
 	mux.Handle("/v1/certificate/", http.StripPrefix("/v1/certificate", certificateRouter))
 
 	infoHandler := handlers.BuildInfoHandler(hsm)
-	infoHandler.RegisterRoutes()
-	mux.Handle("/v1/info/", http.StripPrefix("/v1/info", infoHandler.Router))
+	mux.HandleFunc("GET /v1/info/pk", infoHandler.GetRootPublicKeyHandler)
 
-	healthRouter := handlers.BuildHealthHandler()
-	mux.Handle("/v1/", http.StripPrefix("/v1", healthRouter))
+	healthHandler := handlers.BuildHealthHandler()
+	mux.HandleFunc("GET /v1/health", healthHandler.HealthCheckHandler)
 
 	// //Add routes for certificate management (non so se vada qui o nell'handler del certificato)
 	// certificateRouter.HandleFunc("/revoke", handlers.RevokeCertificate)

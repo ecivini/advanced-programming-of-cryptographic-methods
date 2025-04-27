@@ -10,8 +10,7 @@ import (
 )
 
 type InfoHandler struct {
-	hsm    *hsm.Hsm
-	Router *http.ServeMux
+	hsm *hsm.Hsm
 }
 
 type GetPublickKeyResponse struct {
@@ -19,24 +18,12 @@ type GetPublickKeyResponse struct {
 }
 
 func BuildInfoHandler(hsm *hsm.Hsm) InfoHandler {
-	router := http.NewServeMux()
-
 	return InfoHandler{
-		hsm:    hsm,
-		Router: router,
+		hsm: hsm,
 	}
-}
-
-func (h *InfoHandler) RegisterRoutes() {
-	h.Router.HandleFunc("/public", h.GetRootPublicKeyHandler)
 }
 
 func (h *InfoHandler) GetRootPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
 	publicKey := h.hsm.GetPublicKey(h.hsm.RootKeyId)
 
 	w.Header().Set("Content-Type", "application/json")
