@@ -5,22 +5,20 @@ import (
 	"net/http"
 
 	"ca/internal/db"
+	"ca/internal/hsm"
 )
 
-func BuildCertificateHandler() *http.ServeMux {
-	router := http.NewServeMux()
-
-	router.HandleFunc("/create", CreateCertificateHandler)
-	router.HandleFunc("/revoke", RevokeCertificateHandler)
-	router.HandleFunc("/get", GetCertificateHandler)
-	router.HandleFunc("/validate", ValidateCertificateHandler)
-	router.HandleFunc("/crl", GetCRLHandler)
-	router.HandleFunc("/renew", RenewCertificateHandler)
-
-	return router
+type CertificateHandler struct {
+	hsm *hsm.Hsm
 }
 
-func CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
+func BuildCertificateHandler(hsm *hsm.Hsm) CertificateHandler {
+	return CertificateHandler{
+		hsm: hsm,
+	}
+}
+
+func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		Email     string `json:"email"`
 		PublicKey string `json:"public_key"`
@@ -42,7 +40,7 @@ func CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(certificate)
 }
 
-func RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
+func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SerialNumber string `json:"serial_number"`
 	}
@@ -65,15 +63,15 @@ func RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func GetCertificateHandler(w http.ResponseWriter, r *http.Request) {
-	serialNumber := r.URL.Query().Get("serial_number")
-	if serialNumber == "" {
-		http.Error(w, "Serial number is required", http.StatusBadRequest)
-		return
-	}
+func (h *CertificateHandler) GetCertificateHandler(w http.ResponseWriter, r *http.Request) {
+	certSerialNumber := r.PathValue("certId")
+	// if certSerialNumber == "" {
+	// 	http.Error(w, "Serial number is required", http.StatusBadRequest)
+	// 	return
+	// }
 
 	//Get certificate
-	certificate, err := db.GetCertificateByID(serialNumber)
+	certificate, err := db.GetCertificateByID(certSerialNumber)
 	if err != nil {
 		http.Error(w, "Failed to get certificate", http.StatusInternalServerError)
 		return
@@ -87,7 +85,7 @@ func GetCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func ValidateCertificateHandler(w http.ResponseWriter, r *http.Request) {
+func (h *CertificateHandler) ValidateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		Certificate string `json:"certificate"`
 	}
@@ -109,7 +107,7 @@ func ValidateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func GetCRLHandler(w http.ResponseWriter, r *http.Request) {
+func (h *CertificateHandler) GetCRLHandler(w http.ResponseWriter, r *http.Request) {
 
 	crl, err := db.GetCRL()
 	if err != nil {
@@ -131,18 +129,11 @@ func GetCRLHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func RenewCertificateHandler(w http.ResponseWriter, r *http.Request) {
-	var requestBody struct {
-		SerialNumber string `json:"serial_number"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
+func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *http.Request) {
+	certSerialNumber := r.PathValue("certId")
 
 	// TODO: Generate a renewed certificate
-	if err := db.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
+	if err := db.RevokeCertificateByID(certSerialNumber); err != nil {
 		http.Error(w, "Failed to renew certificate", http.StatusInternalServerError)
 		return
 	}

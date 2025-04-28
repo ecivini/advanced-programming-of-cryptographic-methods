@@ -37,21 +37,19 @@ func InitServer(hsm *hsm.Hsm) {
 	mux := http.NewServeMux()
 
 	// Register handlers
-	certificateRouter := handlers.BuildCertificateHandler()
-	mux.Handle("/v1/certificate/", http.StripPrefix("/v1/certificate", certificateRouter))
+	certificateHandler := handlers.BuildCertificateHandler(hsm)
+	mux.HandleFunc("PUT /v1/certificate", certificateHandler.CreateCertificateHandler)
+	mux.HandleFunc("POST /v1/certificate/revoke", certificateHandler.RevokeCertificateHandler)
+	mux.HandleFunc("GET /v1/certificate/{certId}", certificateHandler.GetCertificateHandler)
+	mux.HandleFunc("POST /v1/certificate/validate", certificateHandler.ValidateCertificateHandler)
+	mux.HandleFunc("GET /v1/certificate/crl", certificateHandler.GetCRLHandler)
+	mux.HandleFunc("POST /v1/certificate/{certId}/renew", certificateHandler.RenewCertificateHandler)
 
 	infoHandler := handlers.BuildInfoHandler(hsm)
 	mux.HandleFunc("GET /v1/info/pk", infoHandler.GetRootPublicKeyHandler)
 
 	healthHandler := handlers.BuildHealthHandler()
 	mux.HandleFunc("GET /v1/health", healthHandler.HealthCheckHandler)
-
-	// //Add routes for certificate management (non so se vada qui o nell'handler del certificato)
-	// certificateRouter.HandleFunc("/revoke", handlers.RevokeCertificate)
-	// certificateRouter.HandleFunc("/get", handlers.GetCertificateHandler)
-	// certificateRouter.HandleFunc("/renew", handlers.RenewCertificate)
-	// certificateRouter.HandleFunc("/list", handlers.GetCRL)
-	// certificateRouter.HandleFunc("/validate", handlers.ValidateCertificate)
 
 	// Start the server
 	serverCfg := config.GetServerConfig()
