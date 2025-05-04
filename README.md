@@ -18,4 +18,13 @@ TODO
 TODO
 
 ## Usage
-TODO
+
+### Starting the server
+In order to start the server, run:
+```bash
+$ docker compose up --build
+```
+During the first startup, the server will automatically create a new root keypair in the HSM and create the root certificate for the CA. In order to create a new keypair and certificate, you have to clean the HSM data by running:
+```bash
+$ docker container rm local-kms
+```
