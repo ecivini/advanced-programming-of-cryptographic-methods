@@ -8,16 +8,16 @@
 - [ ] (Emanuele+Alessia) Write report
 
 ## API Certificate Management 
-- (POST) Create Certificate  
-- (GET) Get Certificate 
-- (POST) Validate Certificate 
-- (POST) Revoke Certificate
-- (GET) Certificate Revocation List
-- (POST) Renew Certificate
+- [ ] (PUT) Commit email and public key
+- [ ] (PUT) Create certificate upon challenge verification
+- [ ] (GET) Get root certificate
+- [ ] (POST) Revoke certificate
+- [ ] (GET) Get Certificate Revocation List
+- [ ] (POST) Renew certificate
 
 ## API HSM
-- (POST) Generate Key Pair
-- (GET) Get Public Key
-- (POST) Sign 
-- (POST) Verify Signature
-  
+- [x] Generate root key pair
+- [x] Generate root certificate
+- [x] Get root public key
+- [x] Sign messages
+- [ ] Verify signatures
