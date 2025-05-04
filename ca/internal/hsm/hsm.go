@@ -2,9 +2,19 @@ package hsm
 
 import (
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"errors"
 	"fmt"
+	"io"
 	"log"
+	"math/big"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -15,6 +25,13 @@ import (
 type Hsm struct {
 	Kms       *kms.Client
 	RootKeyId *string
+}
+
+type HsmECDSASigner struct {
+	Hsm        *Hsm
+	PublicKey  crypto.PublicKey
+	SigningAlg types.SigningAlgorithmSpec
+	Context    context.Context
 }
 
 func ConnectToHSM() Hsm {
@@ -36,14 +53,23 @@ func ConnectToHSM() Hsm {
 	fmt.Println("[+] Connected successfully to HSM.")
 
 	rootKeyId := getRootKeyId(kmsClient)
+	shouldCreateRootCertificate := false
 	if rootKeyId == nil {
 		rootKeyId = CreateRootKey(kmsClient)
+
+		shouldCreateRootCertificate = true
 	}
 
-	return Hsm{
+	hsm := Hsm{
 		Kms:       kmsClient,
 		RootKeyId: rootKeyId,
 	}
+
+	if shouldCreateRootCertificate {
+		hsm.CreateRootCertificate()
+	}
+
+	return hsm
 }
 
 func CreateRootKey(hsm *kms.Client) *string {
@@ -63,7 +89,70 @@ func CreateRootKey(hsm *kms.Client) *string {
 	return result.KeyMetadata.KeyId
 }
 
-func (hsm *Hsm) GetPublicKey(keyId *string) []byte {
+func (hsm *Hsm) CreateRootCertificate() {
+	// Create signer
+	signer, err := hsm.BuildECDSASigner(context.Background())
+	if err != nil {
+		log.Fatalf("[-] Unable to create ECDSA signer: %s", err)
+	}
+
+	now := time.Now()
+	oneYearFromNow := now.Add(time.Hour * 24 * 365)
+
+	rootCert := &x509.Certificate{
+		SerialNumber: big.NewInt(0),
+		Subject: pkix.Name{
+			CommonName: "Root CA",
+		},
+		NotBefore:             now,
+		NotAfter:              oneYearFromNow,
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign,
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+	}
+
+	// 6. Sign certificate with KMS
+	certDER, err := x509.CreateCertificate(
+		rand.Reader,
+		rootCert,
+		rootCert,
+		signer.PublicKey,
+		signer,
+	)
+	if err != nil {
+		log.Fatalf("[-] Unable to create root certificate: %s", err)
+	}
+
+	// 7. Output the PEM certificate
+	rootCertFile, err := os.OpenFile("/certs/root.pem", os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		log.Fatalf("[-] Unable to store root certificate: %s", err)
+	}
+	defer rootCertFile.Close()
+
+	pem.Encode(rootCertFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+}
+
+func (hsm *Hsm) GetPublicKeyPEM(keyId *string) (string, error) {
+	pubKeyDer := hsm.GetPublicKey(keyId)
+	if pubKeyDer == nil {
+		return "", errors.New("Unable to find key with id " + *keyId)
+	}
+
+	// Create a PEM block with the public key
+	pemBlock := &pem.Block{
+		Type:  "PUBLIC KEY",        // This is the PEM block type
+		Bytes: pubKeyDer.X.Bytes(), // DER bytes (we don't need to re-encode in this case)
+	}
+
+	// Store PEM in a variable (as a string)
+	publicKeyPem := pem.EncodeToMemory(pemBlock)
+
+	return string(publicKeyPem), nil
+}
+
+func (hsm *Hsm) GetPublicKey(keyId *string) *ecdsa.PublicKey {
 	publicKeyInput := &kms.GetPublicKeyInput{
 		KeyId: keyId,
 	}
@@ -74,22 +163,62 @@ func (hsm *Hsm) GetPublicKey(keyId *string) []byte {
 		return nil
 	}
 
-	return publicKeyOutput.PublicKey
+	publickKeyAny, err := x509.ParsePKIXPublicKey(publicKeyOutput.PublicKey)
+	if err != nil {
+		log.Fatalf("[-] Unable to parse DER public key: %s", err)
+		return nil
+	}
+
+	publickKey, ok := publickKeyAny.(*ecdsa.PublicKey)
+	if !ok {
+		panic("public key is not of type ecdsa.PublicKey")
+	}
+
+	return publickKey
 }
 
-func (hsm *Hsm) SignMessage(keyId *string, message []byte, algorithm types.SigningAlgorithmSpec) []byte {
-	signInput := &kms.SignInput{
-		KeyId:            keyId,
-		Message:          message,
-		SigningAlgorithm: algorithm,
-	}
-
-	signOutput, err := hsm.Kms.Sign(context.Background(), signInput)
+func (hsm *Hsm) BuildECDSASigner(ctx context.Context) (*HsmECDSASigner, error) {
+	pubResp, err := hsm.Kms.GetPublicKey(ctx, &kms.GetPublicKeyInput{
+		KeyId: aws.String(*hsm.RootKeyId),
+	})
 	if err != nil {
-		log.Fatalf("[-] Unable to sign message: %v", err)
+		return nil, err
 	}
 
-	return signOutput.Signature
+	pubKey, err := x509.ParsePKIXPublicKey(pubResp.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	ecdsaKey, ok := pubKey.(*ecdsa.PublicKey)
+	if !ok {
+		return nil, errors.New("KMS key is not ECDSA")
+	}
+
+	return &HsmECDSASigner{
+		Hsm:        hsm,
+		PublicKey:  ecdsaKey,
+		SigningAlg: types.SigningAlgorithmSpecEcdsaSha256,
+		Context:    ctx,
+	}, nil
+}
+
+func (s *HsmECDSASigner) Public() crypto.PublicKey {
+	return s.PublicKey
+}
+
+func (s *HsmECDSASigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
+	signOut, err := s.Hsm.Kms.Sign(s.Context, &kms.SignInput{
+		KeyId:            aws.String(*s.Hsm.RootKeyId),
+		Message:          digest,
+		MessageType:      types.MessageTypeDigest,
+		SigningAlgorithm: s.SigningAlg,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return signOut.Signature, nil
 }
 
 // The HSM stores only the root CA key

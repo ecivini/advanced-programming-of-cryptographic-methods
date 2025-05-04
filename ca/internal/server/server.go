@@ -10,6 +10,7 @@ import (
 	"ca/internal/config"
 	"ca/internal/hsm"
 	"ca/internal/server/handlers"
+	certificate "ca/internal/server/handlers/certificate"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -37,7 +38,8 @@ func InitServer(hsm *hsm.Hsm) {
 	mux := http.NewServeMux()
 
 	// Register handlers
-	certificateHandler := handlers.BuildCertificateHandler(hsm)
+	certificateRepo := certificate.BuildCertificateRepository(hsm, db)
+	certificateHandler := certificate.BuildCertificateHandler(certificateRepo)
 	mux.HandleFunc("PUT /v1/certificate", certificateHandler.CreateCertificateHandler)
 	mux.HandleFunc("POST /v1/certificate/revoke", certificateHandler.RevokeCertificateHandler)
 	mux.HandleFunc("GET /v1/certificate/{certId}", certificateHandler.GetCertificateHandler)

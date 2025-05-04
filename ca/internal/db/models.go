@@ -22,6 +22,7 @@ type IssuedCertificate struct {
 	VerifiedSignature []byte             `bson:"signature,omitempty"`
 	ValidFrom         primitive.DateTime `bson:"valid_from,omitempty"`
 	ValidUntil        primitive.DateTime `bson:"valid_until,omitempty"`
+	RawCertificate    []byte             `bson:"raw_certificate,omitempty"`
 }
 
 func (i *IssuedCertificate) Sign(rand io.Reader, template *IssuedCertificate, parent *IssuedCertificate, pub interface{}, priv interface{}) ([]byte, error) {

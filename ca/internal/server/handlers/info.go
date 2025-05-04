@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,19 +23,18 @@ func BuildInfoHandler(hsm *hsm.Hsm) InfoHandler {
 }
 
 func (h *InfoHandler) GetRootPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
-	publicKey := h.hsm.GetPublicKey(h.hsm.RootKeyId)
+	publicKey, err := h.hsm.GetPublicKeyPEM(h.hsm.RootKeyId)
 
 	w.Header().Set("Content-Type", "application/json")
-	if publicKey == nil {
+	if err == nil {
 		fmt.Println("[-] Requested key is not in the HSM: ", h.hsm.RootKeyId)
 		http.Error(w, "Unable to retrieve public key", http.StatusInternalServerError)
 		return
 	}
 
-	publicKeyStr := base64.StdEncoding.EncodeToString(publicKey)
-	fmt.Println(publicKeyStr)
+	fmt.Println(publicKey)
 	response, err := json.Marshal(GetPublickKeyResponse{
-		PublicKey: publicKeyStr,
+		PublicKey: publicKey,
 	})
 
 	if err != nil {

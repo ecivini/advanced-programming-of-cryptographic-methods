@@ -2,19 +2,19 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"ca/internal/db"
-	"ca/internal/hsm"
 )
 
 type CertificateHandler struct {
-	hsm *hsm.Hsm
+	repo CertificateRepository
 }
 
-func BuildCertificateHandler(hsm *hsm.Hsm) CertificateHandler {
+func BuildCertificateHandler(repo CertificateRepository) CertificateHandler {
 	return CertificateHandler{
-		hsm: hsm,
+		repo: repo,
 	}
 }
 
@@ -29,15 +29,18 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		return
 	}
 
+	fmt.Println("\n\nCreating cert started")
+
 	//Cenerate certificate
-	certificate, err := GenerateCertificate(requestBody.Email, []byte(requestBody.PublicKey))
+	certificate, err := h.repo.CreateCertificate(requestBody.Email, []byte(requestBody.PublicKey))
 	if err != nil {
+		fmt.Printf("[-] Unable to create certificate: %s\n", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(certificate)
+	json.NewEncoder(w).Encode(string(certificate))
 }
 
 func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {

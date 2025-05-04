@@ -58,6 +58,8 @@ services:
     depends_on:
       - mongo
       - local-kms
+    volumes:
+      - ./dev-certs:/certs
 
 volumes:
   mongo-data:
