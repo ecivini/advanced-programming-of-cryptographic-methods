@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 
 	"ca/internal/db"
 )
@@ -25,11 +26,25 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		response := map[string]string{
+			"error": "Invalid request format",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 
-	fmt.Println("\n\nCreating cert started")
+	// Validate the email
+	if !ValidateEmail(requestBody.Email) {
+		response := map[string]string{
+			"error": "Provided invalid email.",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
 
 	//Cenerate certificate
 	certificate, err := h.repo.CreateCertificate(requestBody.Email, []byte(requestBody.PublicKey))
@@ -147,4 +162,9 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func ValidateEmail(email string) bool {
+	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	return re.MatchString(email)
 }

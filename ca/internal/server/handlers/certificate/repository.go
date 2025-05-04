@@ -6,13 +6,9 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"math/big"
-	"net/http"
 	"os"
-	"regexp"
 	"time"
 
 	"ca/internal/hsm"
@@ -33,11 +29,6 @@ func BuildCertificateRepository(hsm *hsm.Hsm, db *mongo.Client) CertificateRepos
 }
 
 func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKeyPEM []byte) ([]byte, error) {
-	// Validate the email
-	if !repo.ValidateEmail(email) {
-		return nil, errors.New("provided email is not valid")
-	}
-
 	// Validate client public key
 	clientPublicKeyPEMBlock, _ := pem.Decode(clientPublicKeyPEM)
 	clientPublicKey, err := x509.ParsePKIXPublicKey(clientPublicKeyPEMBlock.Bytes)
@@ -117,11 +108,6 @@ func (repo *CertificateRepository) verifySignature(challenge, response, publicKe
 	panic("unimplemented")
 }
 
-func (repo *CertificateRepository) ValidateEmail(email string) bool {
-	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	return re.MatchString(email)
-}
-
 func (repo *CertificateRepository) ValidatePublicKey(publicKey []byte) error {
 	// Check if the public key has a valid format
 	_, err := x509.ParsePKIXPublicKey(publicKey)
@@ -132,10 +118,4 @@ func (repo *CertificateRepository) GenerateChallenge() string {
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	return base64.StdEncoding.EncodeToString(bytes)
-}
-
-func (repo *CertificateRepository) ParseJSONBody(r *http.Request, target interface{}) error {
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(target)
-	return err
 }
