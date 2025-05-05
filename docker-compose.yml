@@ -8,9 +8,9 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
     command: [
-      # "--tlsMode", "allowTLS",
-      # "--tlsCertificateKeyFile", "/certs/mongodb.pem", # Path to the server cert+key
-      # "--tlsCAFile", "/certs/dev-ca.pem" # Path to the CA certificate
+      "--tlsMode", "requireTLS",
+      "--tlsCertificateKeyFile", "/certs/mongodb.pem", # Path to the server cert+key
+      "--tlsCAFile", "/certs/client-ca.pem" # Path to the CA certificate
     ]
     volumes:
       - mongo-data:/data/db
