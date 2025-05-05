@@ -11,8 +11,10 @@ import (
 	"os"
 	"time"
 
+	"ca/internal/db"
 	"ca/internal/hsm"
 
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -26,6 +28,24 @@ func BuildCertificateRepository(hsm *hsm.Hsm, db *mongo.Client) CertificateRepos
 		hsm: hsm,
 		db:  db,
 	}
+}
+
+func (repo *CertificateRepository) CreateIdentityCommitment(email string, publicKeyDer []byte, keyType string) string {
+	commitment := db.IdentityCommitment{
+		ID:           primitive.NewObjectID(),
+		Challenge:    GenerateChallenge(),
+		Email:        email,
+		PublicKeyDER: publicKeyDer,
+		KeyType:      keyType,
+		ValidFrom:    primitive.NewDateTimeFromTime(time.Now()),
+		ValidUntil:   primitive.NewDateTimeFromTime(time.Now().Add(time.Hour * 24)), //  Commitments are valid for one day
+		Proof:        nil,
+	}
+
+	//Store the certificate in the database
+	db.StoreIdentityCommitment(repo.db, commitment)
+
+	return commitment.Challenge
 }
 
 func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKeyPEM []byte) ([]byte, error) {
@@ -114,7 +134,7 @@ func (repo *CertificateRepository) ValidatePublicKey(publicKey []byte) error {
 	return err
 }
 
-func (repo *CertificateRepository) GenerateChallenge() string {
+func GenerateChallenge() string {
 	bytes := make([]byte, 32)
 	rand.Read(bytes)
 	return base64.StdEncoding.EncodeToString(bytes)
