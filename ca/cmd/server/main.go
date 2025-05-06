@@ -4,8 +4,6 @@ import (
 	hsmSvc "ca/internal/hsm"
 	"ca/internal/server"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log"
 	"os"
@@ -22,30 +20,7 @@ func main() {
 	fmt.Println("[+] Connecting to database...")
 	mongoUri := os.Getenv("MONGO_URI")
 
-	// Loads CA certificate file
-	caCert, err := os.ReadFile("/certs/db-ca.pem")
-	if err != nil {
-		panic(err)
-	}
-
-	caCertPool := x509.NewCertPool()
-	if ok := caCertPool.AppendCertsFromPEM(caCert); !ok {
-		panic("Error: CA file must be in PEM format")
-	}
-
-	// Loads client certificate files
-	cert, err := tls.LoadX509KeyPair("/certs/mongodb.pem", "/certs/mongodb.key")
-	if err != nil {
-		panic(err)
-	}
-
-	// Instantiates a Config instance
-	tlsConfig := &tls.Config{
-		RootCAs:      caCertPool,
-		Certificates: []tls.Certificate{cert},
-	}
-
-	db, err := mongo.Connect(options.Client().ApplyURI(mongoUri).SetTLSConfig(tlsConfig))
+	db, err := mongo.Connect(options.Client().ApplyURI(mongoUri))
 	if err != nil {
 		log.Fatalf("[-] Unable to connect to the database: %v", err)
 	}

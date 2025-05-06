@@ -58,8 +58,6 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	fmt.Println(requestBody.KeyType, SupportedKeyTypes)
-
 	// Validate key type
 	if !slices.Contains(SupportedKeyTypes, requestBody.KeyType) {
 		response := map[string]string{

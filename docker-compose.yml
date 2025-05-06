@@ -7,15 +7,10 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
-    command: [
-      "--tlsMode", "requireTLS",
-      "--tlsCertificateKeyFile", "/certs/mongodb.pem", # Path to the server cert+key
-      "--tlsCAFile", "/certs/client-ca.pem" # Path to the CA certificate
-    ]
+    command: mongod --config /etc/mongo/mongod.conf
     volumes:
       - mongo-data:/data/db
-      - ./dev-certs:/certs:ro
-
+      - ./mongod.conf:/etc/mongo/mongod.conf
   local-kms:
     image: nsmithuk/local-kms:latest
     container_name: local-kms
