@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"ca/internal/config"
+	"ca/internal/email"
 	"ca/internal/hsm"
 	"ca/internal/server/handlers"
 	certificate "ca/internal/server/handlers/certificate"
@@ -14,14 +15,14 @@ import (
 )
 
 // InitServer initializes and starts the HTTP server.
-func InitServer(hsm *hsm.Hsm, db *mongo.Client) {
+func InitServer(hsm *hsm.Hsm, db *mongo.Client, emailService *email.EmailService) {
 
 	// Creating server
 	mux := http.NewServeMux()
 
 	// Register handlers
 	certificateRepo := certificate.BuildCertificateRepository(hsm, db)
-	certificateHandler := certificate.BuildCertificateHandler(certificateRepo)
+	certificateHandler := certificate.BuildCertificateHandler(certificateRepo, emailService)
 	mux.HandleFunc("PUT /v1/identity", certificateHandler.CommitIdentityHandler)
 	mux.HandleFunc("PUT /v1/certificate", certificateHandler.CreateCertificateHandler)
 	mux.HandleFunc("POST /v1/certificate/revoke", certificateHandler.RevokeCertificateHandler)

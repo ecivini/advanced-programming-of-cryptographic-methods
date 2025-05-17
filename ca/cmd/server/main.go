@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ca/internal/email"
 	hsmSvc "ca/internal/hsm"
 	"ca/internal/server"
 	"context"
@@ -25,6 +26,12 @@ func main() {
 		log.Fatalf("[-] Unable to connect to the database: %v", err)
 	}
 	fmt.Println("[+] Connected to database.")
+
+	// Connect to email service
+	emailService := email.NewEmailService()
+	if emailService == nil {
+		log.Fatal("[-] Failed to create email service client")
+	}
 
 	// Close db connection
 	defer db.Disconnect(context.Background())

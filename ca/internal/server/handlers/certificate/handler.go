@@ -1,12 +1,14 @@
 package handlers
 
 import (
+	"ca/internal/email"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"slices"
@@ -20,12 +22,14 @@ var SupportedKeyTypes = []string{
 }
 
 type CertificateHandler struct {
-	repo CertificateRepository
+	repo         CertificateRepository
+	emailService *email.EmailService
 }
 
-func BuildCertificateHandler(repo CertificateRepository) CertificateHandler {
+func BuildCertificateHandler(repo CertificateRepository, email *email.EmailService) CertificateHandler {
 	return CertificateHandler{
-		repo: repo,
+		repo:         repo,
+		emailService: email,
 	}
 }
 
@@ -130,6 +134,14 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 
 	// Store commitment
 	challenge := h.repo.CreateIdentityCommitment(requestBody.Email, publicKeyBytes, requestBody.KeyType)
+
+	// Send the challenge code by email
+	_, err = h.emailService.SendChallengeEmail(requestBody.Email, challenge)
+	if err != nil {
+		log.Printf("Failed to send challenge email: %v", err)
+		http.Error(w, "could not send challenge email", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(string(challenge))
