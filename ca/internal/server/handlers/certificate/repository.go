@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"os"
 	"time"
@@ -48,13 +49,13 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	return commitment.Challenge
 }
 
-func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKeyPEM []byte) ([]byte, error) {
+func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey []byte) ([]byte, error) {
 	// Validate client public key
-	clientPublicKeyPEMBlock, _ := pem.Decode(clientPublicKeyPEM)
-	clientPublicKey, err := x509.ParsePKIXPublicKey(clientPublicKeyPEMBlock.Bytes)
-	if err != nil {
-		return nil, err
-	}
+	// clientPublicKeyPEMBlock, _ := pem.Decode(clientPublicKeyPEM)
+	// clientPublicKey, err := x509.ParsePKIXPublicKey(clientPublicKeyPEMBlock.Bytes)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// Create client certificate template
 	now := time.Now()
@@ -112,6 +113,17 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 
 	return pemData, nil
 
+}
+
+func (repo *CertificateRepository) GetCommitmentFromEmail(email string) *db.IdentityCommitment {
+	commitment, err := db.RetrieveIdentityCommittment(repo.db, email)
+
+	if err != nil {
+		fmt.Println("[-] Unable to retrieve identity commitment: ", err)
+		return nil
+	}
+
+	return commitment
 }
 
 func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {

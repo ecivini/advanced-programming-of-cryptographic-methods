@@ -5,14 +5,21 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/asn1"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"slices"
 	"strings"
 )
+
+type ECDSASignature struct {
+	R, S *big.Int
+}
 
 var SupportedKeyTypes = []string{
 	"ECDSA",
@@ -146,10 +153,11 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	json.NewEncoder(w).Encode(string(challenge))
 }
 
+// TODO: Refactor
 func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
-		Email     string `json:"email"`
-		PublicKey string `json:"public_key"`
+		SignatureB64 string `json:"signature"`
+		Email        string `json:"email"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -162,10 +170,49 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	// Validate the email
-	if !email.ValidateEmail(requestBody.Email) {
+	signatureBytes, err := base64.StdEncoding.DecodeString(requestBody.SignatureB64)
+	if err != nil {
 		response := map[string]string{
-			"error": "Provided invalid email.",
+			"error": "Unable to decode signature",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	committedIdentity := h.repo.GetCommitmentFromEmail(requestBody.Email)
+	if committedIdentity == nil {
+		response := map[string]string{
+			"error": "No identity commitment found",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	challenge, _ := base64.StdEncoding.DecodeString(committedIdentity.Challenge)
+
+	// Verify signature
+	var signatureValid bool
+	if committedIdentity.KeyType == "ECDSA" {
+		publicKeyDerAny, _ := x509.ParsePKIXPublicKey(committedIdentity.PublicKeyDER)
+		ecdsaKey := publicKeyDerAny.(*ecdsa.PublicKey)
+		var signature ECDSASignature
+		_, err = asn1.Unmarshal(signatureBytes, &signature)
+		if err != nil {
+			panic(err)
+		}
+		signatureValid = ecdsa.Verify(ecdsaKey, challenge, signature.R, signature.S)
+	} else {
+		// TODO: Add rsa signature verification
+		log.Fatal("Signature verification with RSA not implemented yet")
+	}
+
+	if !signatureValid {
+		response := map[string]string{
+			"error": "Invalid signature",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -174,7 +221,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	//Cenerate certificate
-	certificate, err := h.repo.CreateCertificate(requestBody.Email, []byte(requestBody.PublicKey))
+	certificate, err := h.repo.CreateCertificate(requestBody.Email, committedIdentity.PublicKeyDER)
 	if err != nil {
 		fmt.Printf("[-] Unable to create certificate: %s\n", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
