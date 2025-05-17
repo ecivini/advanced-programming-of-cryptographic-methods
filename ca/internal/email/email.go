@@ -28,11 +28,6 @@ func NewEmailService() *EmailService {
 		log.Fatal("RESEND_FROM environment variable is not set")
 	}
 
-	base := os.Getenv("APP_BASE_URL")
-	if base == "" {
-		log.Fatal("APP_BASE_URL environment variable is not set")
-	}
-
 	client := resend.NewClient(apiKey)
 
 	return &EmailService{

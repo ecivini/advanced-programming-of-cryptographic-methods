@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 )
@@ -52,7 +51,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	}
 
 	// Validate the email
-	if !ValidateEmail(requestBody.Email) {
+	if !email.ValidateEmail(requestBody.Email) {
 		response := map[string]string{
 			"error": "Provided invalid email.",
 		}
@@ -164,7 +163,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	// Validate the email
-	if !ValidateEmail(requestBody.Email) {
+	if !email.ValidateEmail(requestBody.Email) {
 		response := map[string]string{
 			"error": "Provided invalid email.",
 		}
@@ -291,8 +290,3 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 // 	w.Header().Set("Content-Type", "application/json")
 // 	json.NewEncoder(w).Encode(response)
 // }
-
-func ValidateEmail(email string) bool {
-	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	return re.MatchString(email)
-}

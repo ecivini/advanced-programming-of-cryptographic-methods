@@ -36,5 +36,5 @@ func main() {
 	// Close db connection
 	defer db.Disconnect(context.Background())
 
-	server.InitServer(&hsm, db)
+	server.InitServer(&hsm, db, emailService)
 }
