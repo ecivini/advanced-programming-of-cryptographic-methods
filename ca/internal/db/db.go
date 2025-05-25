@@ -10,9 +10,8 @@ import (
 
 func StoreIdentityCommitment(client *mongo.Client, commitment IdentityCommitment) error {
 	collection := client.Database("ca").Collection("identity_commitments")
-	result, err := collection.InsertOne(context.Background(), commitment)
-	fmt.Println(result)
-	fmt.Println(err)
+	_, err := collection.InsertOne(context.Background(), commitment)
+
 	return err
 }
 

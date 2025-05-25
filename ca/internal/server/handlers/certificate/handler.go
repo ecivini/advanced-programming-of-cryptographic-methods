@@ -83,9 +83,10 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 
 	// Validate key type
 	block, _ := pem.Decode([]byte(requestBody.PublicKeyPEM))
-	publicKeyDerAny, err := x509.ParsePKIXPublicKey(block.Bytes)
-	publicKeyBytes, _ := x509.MarshalPKIXPublicKey(requestBody.PublicKeyPEM)
-	if err != nil {
+	publicKeyDerAny, err_parse := x509.ParsePKIXPublicKey(block.Bytes)
+	publicKeyBytes, err_marshal := x509.MarshalPKIXPublicKey(publicKeyDerAny)
+	if err_parse != nil || err_marshal != nil {
+		fmt.Println("[-] Error while parsing public key: ", err_parse, err_marshal)
 		response := map[string]string{
 			"error": "Provided invalid public_key.",
 		}
@@ -145,7 +146,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	challenge := h.repo.CreateIdentityCommitment(requestBody.Email, publicKeyBytes, requestBody.KeyType)
 
 	// Send the challenge code by email
-	_, err = h.emailService.SendChallengeEmail(requestBody.Email, challenge)
+	_, err := h.emailService.SendChallengeEmail(requestBody.Email, challenge)
 	if err != nil {
 		log.Printf("Failed to send challenge email: %v", err)
 		http.Error(w, "could not send challenge email", http.StatusInternalServerError)

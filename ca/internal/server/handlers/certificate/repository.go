@@ -44,7 +44,10 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	}
 
 	//Store the certificate in the database
-	db.StoreIdentityCommitment(repo.db, commitment)
+	err := db.StoreIdentityCommitment(repo.db, commitment)
+	if err != nil {
+		fmt.Println("Unable to store identity commitment: ", err)
+	}
 
 	return commitment.Challenge
 }
