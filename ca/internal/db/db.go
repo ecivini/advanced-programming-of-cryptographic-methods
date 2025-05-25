@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -9,17 +10,22 @@ import (
 
 func StoreIdentityCommitment(client *mongo.Client, commitment IdentityCommitment) error {
 	collection := client.Database("ca").Collection("identity_commitments")
-	_, err := collection.InsertOne(context.Background(), commitment)
+	result, err := collection.InsertOne(context.Background(), commitment)
+	fmt.Println(result)
+	fmt.Println(err)
 	return err
 }
 
 func RetrieveIdentityCommittment(client *mongo.Client, email string) (*IdentityCommitment, error) {
+	fmt.Println("A")
 	collection := client.Database("ca").Collection("identity_commitments")
-	filter := bson.D{{"email", email}}
+	filter := bson.M{"email": email}
+	fmt.Println("B")
 
 	var result IdentityCommitment
-	err := collection.FindOne(context.TODO(), filter, nil).Decode(&result)
+	err := collection.FindOne(context.Background(), filter, nil).Decode(&result)
 
+	fmt.Println("C", result, err)
 	if err != nil {
 		return nil, err
 	}

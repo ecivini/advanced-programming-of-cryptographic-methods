@@ -43,7 +43,7 @@ func ValidateEmail(address string) bool {
 }
 
 // send sends an email with context, subject, and HTML body.
-func (e *EmailService) send(ctx context.Context, to, subject, htmlBody string) (string, error) {
+func (e *EmailService) send(ctx context.Context, to, subject, body string) (string, error) {
 	if !ValidateEmail(to) {
 		return "", fmt.Errorf("invalid email address: %s", to)
 	}
@@ -52,7 +52,7 @@ func (e *EmailService) send(ctx context.Context, to, subject, htmlBody string) (
 		From:    e.From,
 		To:      []string{to},
 		Subject: subject,
-		Html:    htmlBody,
+		Text:    body,
 	}
 
 	// If the client supports context:
@@ -61,13 +61,13 @@ func (e *EmailService) send(ctx context.Context, to, subject, htmlBody string) (
 		return "", fmt.Errorf("failed to send email to %s: %w", to, err)
 	}
 
-	log.Printf("Email sent to %s | ID: %s", to, sent.Id)
+	log.Printf("[+] Email sent to %s | ID: %s", to, sent.Id)
 	return sent.Id, nil
 }
 
 // SendEmail sends a generic email using Background context.
-func (e *EmailService) SendEmail(to, subject, htmlBody string) (string, error) {
-	return e.send(context.Background(), to, subject, htmlBody)
+func (e *EmailService) SendEmail(to, subject, body string) (string, error) {
+	return e.send(context.Background(), to, subject, body)
 }
 
 // SendVerificationEmail sends a verification link to the recipient.

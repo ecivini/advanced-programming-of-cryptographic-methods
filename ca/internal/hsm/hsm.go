@@ -135,15 +135,15 @@ func (hsm *Hsm) CreateRootCertificate() {
 }
 
 func (hsm *Hsm) GetPublicKeyPEM(keyId *string) (string, error) {
-	pubKeyDer := hsm.GetPublicKey(keyId)
-	if pubKeyDer == nil {
+	pubKeyDer, err := hsm.GetPublicKey(keyId)
+	if err != nil {
 		return "", errors.New("Unable to find key with id " + *keyId)
 	}
 
 	// Create a PEM block with the public key
 	pemBlock := &pem.Block{
-		Type:  "PUBLIC KEY",        // This is the PEM block type
-		Bytes: pubKeyDer.X.Bytes(), // DER bytes (we don't need to re-encode in this case)
+		Type:  "PUBLIC KEY", // This is the PEM block type
+		Bytes: pubKeyDer,    // DER bytes (we don't need to re-encode in this case)
 	}
 
 	// Store PEM in a variable (as a string)
@@ -152,7 +152,7 @@ func (hsm *Hsm) GetPublicKeyPEM(keyId *string) (string, error) {
 	return string(publicKeyPem), nil
 }
 
-func (hsm *Hsm) GetPublicKey(keyId *string) *ecdsa.PublicKey {
+func (hsm *Hsm) GetPublicKey(keyId *string) ([]byte, error) {
 	publicKeyInput := &kms.GetPublicKeyInput{
 		KeyId: keyId,
 	}
@@ -160,21 +160,10 @@ func (hsm *Hsm) GetPublicKey(keyId *string) *ecdsa.PublicKey {
 	publicKeyOutput, err := hsm.Kms.GetPublicKey(context.Background(), publicKeyInput)
 	if err != nil {
 		fmt.Println("[-] Key does not exist: ", keyId)
-		return nil
+		return []byte{}, nil
 	}
 
-	publickKeyAny, err := x509.ParsePKIXPublicKey(publicKeyOutput.PublicKey)
-	if err != nil {
-		log.Fatalf("[-] Unable to parse DER public key: %s", err)
-		return nil
-	}
-
-	publickKey, ok := publickKeyAny.(*ecdsa.PublicKey)
-	if !ok {
-		panic("public key is not of type ecdsa.PublicKey")
-	}
-
-	return publickKey
+	return publicKeyOutput.PublicKey, nil
 }
 
 func (hsm *Hsm) BuildECDSASigner(ctx context.Context) (*HsmECDSASigner, error) {

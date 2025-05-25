@@ -67,6 +67,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	fmt.Println("[+] Validated email")
 
 	// Validate key type
 	if !slices.Contains(SupportedKeyTypes, requestBody.KeyType) {
@@ -78,6 +79,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	fmt.Println("[+] Validated key type ", requestBody.KeyType)
 
 	// Validate key type
 	block, _ := pem.Decode([]byte(requestBody.PublicKeyPEM))
@@ -92,6 +94,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 		json.NewEncoder(w).Encode(response)
 		return
 	}
+	fmt.Println("[+] Validated public key")
 
 	// Verifies the public key is valid
 	if requestBody.KeyType == "ECDSA" {

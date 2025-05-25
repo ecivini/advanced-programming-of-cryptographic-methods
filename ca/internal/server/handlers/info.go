@@ -26,13 +26,12 @@ func (h *InfoHandler) GetRootPublicKeyHandler(w http.ResponseWriter, r *http.Req
 	publicKey, err := h.hsm.GetPublicKeyPEM(h.hsm.RootKeyId)
 
 	w.Header().Set("Content-Type", "application/json")
-	if err == nil {
+	if err != nil {
 		fmt.Println("[-] Requested key is not in the HSM: ", h.hsm.RootKeyId)
 		http.Error(w, "Unable to retrieve public key", http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Println(publicKey)
 	response, err := json.Marshal(GetPublickKeyResponse{
 		PublicKey: publicKey,
 	})
