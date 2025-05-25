@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -52,20 +54,20 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	return commitment.Challenge
 }
 
-func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey []byte) ([]byte, error) {
-	// Validate client public key
-	// clientPublicKeyPEMBlock, _ := pem.Decode(clientPublicKeyPEM)
-	// clientPublicKey, err := x509.ParsePKIXPublicKey(clientPublicKeyPEMBlock.Bytes)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
+func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey) ([]byte, error) {
 	// Create client certificate template
 	now := time.Now()
 	oneYearFromNow := now.Add(time.Hour * 24 * 365)
 
+	// Create random serial number
+	limit := new(big.Int).Lsh(big.NewInt(1), 2048)
+	serialNumber, err := rand.Int(rand.Reader, limit)
+	if err != nil {
+		return nil, errors.New("unable to generate serial number")
+	}
+
 	clientCertTemplate := &x509.Certificate{
-		SerialNumber: big.NewInt(2),
+		SerialNumber: serialNumber,
 		Subject: pkix.Name{
 			CommonName: email,
 		},
@@ -118,8 +120,8 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 
 }
 
-func (repo *CertificateRepository) GetCommitmentFromEmail(email string) *db.IdentityCommitment {
-	commitment, err := db.RetrieveIdentityCommittment(repo.db, email)
+func (repo *CertificateRepository) GetCommitmentFromChallenge(challenge string) *db.IdentityCommitment {
+	commitment, err := db.RetrieveIdentityCommittment(repo.db, challenge)
 
 	if err != nil {
 		fmt.Println("[-] Unable to retrieve identity commitment: ", err)

@@ -41,5 +41,5 @@ $ openssl ec -in priv-key.pem -pubout > pub-key.pem
 ```
 Sign the challenge:
 ```bash
-$ cat challenge.txt | base64 -d | xxd -p > challenge_hash.txt && openssl dgst -sha256 -sign priv-key.pem challenge_hash.txt | base64 > signature.txt && rm challenge_hash.txt 
+$ cat challenge.txt | base64 -d > challenge_raw.bin && openssl dgst -sha256 -sign priv-key.pem challenge_raw.bin | base64 > signature.txt && rm challenge_raw.bin 
 ```

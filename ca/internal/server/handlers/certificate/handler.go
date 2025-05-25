@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"ca/internal/email"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/base64"
@@ -14,7 +16,6 @@ import (
 	"math/big"
 	"net/http"
 	"slices"
-	"strings"
 )
 
 type ECDSASignature struct {
@@ -83,10 +84,9 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 
 	// Validate key type
 	block, _ := pem.Decode([]byte(requestBody.PublicKeyPEM))
-	publicKeyDerAny, err_parse := x509.ParsePKIXPublicKey(block.Bytes)
-	publicKeyBytes, err_marshal := x509.MarshalPKIXPublicKey(publicKeyDerAny)
-	if err_parse != nil || err_marshal != nil {
-		fmt.Println("[-] Error while parsing public key: ", err_parse, err_marshal)
+	publicKeyBytes := block.Bytes
+	if ValidatePublicKey(publicKeyBytes) == nil {
+		fmt.Println("[-] Error while parsing public key")
 		response := map[string]string{
 			"error": "Provided invalid public_key.",
 		}
@@ -96,41 +96,6 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 		return
 	}
 	fmt.Println("[+] Validated public key")
-
-	// Verifies the public key is valid
-	if requestBody.KeyType == "ECDSA" {
-		_, ok := publicKeyDerAny.(*ecdsa.PublicKey)
-		if !ok {
-			response := map[string]string{
-				"error": "Provided invalid public_key.",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-	} else if strings.HasPrefix(requestBody.KeyType, "RSA_") {
-		rsaKey, ok := publicKeyDerAny.(*rsa.PublicKey)
-		if !ok {
-			response := map[string]string{
-				"error": "Provided invalid public_key.",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		if rsaKey.Size() != 2048 || rsaKey.Size() != 4096 {
-			response := map[string]string{
-				"error": "Provided invalid public_key.",
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-	}
 
 	if !slices.Contains(SupportedKeyTypes, requestBody.KeyType) {
 		response := map[string]string{
@@ -153,15 +118,19 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
+	response := map[string]string{
+		"challenge": challenge,
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(string(challenge))
+	w.WriteHeader(http.StatusBadRequest)
+	json.NewEncoder(w).Encode(response)
 }
 
 // TODO: Refactor
 func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SignatureB64 string `json:"signature"`
-		Email        string `json:"email"`
+		Challenge    string `json:"challenge"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -185,7 +154,17 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	committedIdentity := h.repo.GetCommitmentFromEmail(requestBody.Email)
+	if requestBody.Challenge == "" {
+		response := map[string]string{
+			"error": "Missing challenge parameter",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	committedIdentity := h.repo.GetCommitmentFromChallenge(requestBody.Challenge)
 	if committedIdentity == nil {
 		response := map[string]string{
 			"error": "No identity commitment found",
@@ -198,6 +177,11 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 
 	challenge, _ := base64.StdEncoding.DecodeString(committedIdentity.Challenge)
 
+	publicKey := ValidatePublicKey(committedIdentity.PublicKeyDER)
+	if publicKey == nil {
+		panic("[-] Already stored public key is invalid.")
+	}
+
 	// Verify signature
 	var signatureValid bool
 	if committedIdentity.KeyType == "ECDSA" {
@@ -208,7 +192,9 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		if err != nil {
 			panic(err)
 		}
-		signatureValid = ecdsa.Verify(ecdsaKey, challenge, signature.R, signature.S)
+
+		hashedChallenge := sha256.Sum256(challenge)
+		signatureValid = ecdsa.Verify(ecdsaKey, hashedChallenge[:], signature.R, signature.S)
 	} else {
 		// TODO: Add rsa signature verification
 		log.Fatal("Signature verification with RSA not implemented yet")
@@ -225,15 +211,19 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	//Cenerate certificate
-	certificate, err := h.repo.CreateCertificate(requestBody.Email, committedIdentity.PublicKeyDER)
+	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey)
 	if err != nil {
 		fmt.Printf("[-] Unable to create certificate: %s\n", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
 		return
 	}
 
+	response := map[string]string{
+		"certificate": string(certificate),
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(string(certificate))
+	w.WriteHeader(http.StatusBadRequest)
+	json.NewEncoder(w).Encode(response)
 }
 
 func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
@@ -257,6 +247,25 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+func ValidatePublicKey(publicKeyDer []byte) crypto.PublicKey {
+	pub, err := x509.ParsePKIXPublicKey(publicKeyDer)
+	if err != nil {
+		return nil
+	}
+
+	switch key := pub.(type) {
+	case *ecdsa.PublicKey:
+		return key
+	case *rsa.PublicKey:
+		if key.Size() < 2048 {
+			return nil
+		}
+		return key
+	}
+
+	return nil
 }
 
 // func (h *CertificateHandler) GetCertificateHandler(w http.ResponseWriter, r *http.Request) {
