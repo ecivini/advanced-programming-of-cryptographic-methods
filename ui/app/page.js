@@ -8,7 +8,7 @@ export default function HomePage() {
 
 useEffect(() => {
   const caUrl = process.env.NEXT_PUBLIC_CA_URL + '/v1/info/pk';
-  console.log(`Fetching CA info from: ${caUrl}`);
+  // console.log(`Fetching CA info from: ${caUrl}`);
   fetch(caUrl, {
     method: 'GET',
     headers: {
