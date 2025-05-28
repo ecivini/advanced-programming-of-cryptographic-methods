@@ -118,12 +118,8 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 		return
 	}
 
-	response := map[string]string{
-		"challenge": challenge,
-	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusOK)
 }
 
 // TODO: Refactor
@@ -222,7 +218,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		"certificate": string(certificate),
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
 
