@@ -7,7 +7,8 @@ export default function CrlPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch('/api/crl')
+    const crlURL = process.env.NEXT_PUBLIC_CA_URL + '/v1/certificate/revoke';
+    fetch(crlURL)
       .then(res => res.json())
       .then(data => {
         setCrl(data);

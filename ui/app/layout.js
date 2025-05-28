@@ -45,6 +45,7 @@ export default function RootLayout({ children }) {
               <Link href="/commit" className="hover:text-blue-600">Commit</Link>
               <Link href="/sign" className="hover:text-blue-600">Sign</Link>
               <Link href="/crl" className="hover:text-blue-600">CRL</Link>
+              <Link href="/certs" className="hover:text-blue-600">Certificates</Link>
             </nav>
           </div>
         </header>
