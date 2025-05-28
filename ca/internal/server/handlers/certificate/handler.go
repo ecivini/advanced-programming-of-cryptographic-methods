@@ -192,10 +192,18 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		hashedChallenge := sha256.Sum256(challenge)
 		signatureValid = ecdsa.Verify(ecdsaKey, hashedChallenge[:], signature.R, signature.S)
 	} else {
-		// TODO: Add rsa signature verification
-		log.Fatal("Signature verification with RSA not implemented yet")
-	}
+		publicKeyDerAny, _ := x509.ParsePKIXPublicKey(committedIdentity.PublicKeyDER)
+		rsaKey := publicKeyDerAny.(*rsa.PublicKey)
 
+		hashedChallenge := sha256.Sum256(challenge)
+		err = rsa.VerifyPKCS1v15(rsaKey, crypto.SHA256, hashedChallenge[:], signatureBytes)
+		if err != nil {
+			fmt.Printf("[-] Error while verifying RSA signature: %s\n", err)
+			signatureValid = false
+		} else {
+			signatureValid = true
+		}
+	}
 	if !signatureValid {
 		response := map[string]string{
 			"error": "Invalid signature",
