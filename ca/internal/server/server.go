@@ -44,7 +44,7 @@ func InitServer(hsm *hsm.Hsm, db *mongo.Client, emailService *email.EmailService
 	fullAddress := serverCfg.Host + ":" + serverCfg.Port
 
 	fmt.Println("[+] Starting CA server on ", fullAddress)
-	corsHandler := cors.Default().Handler(mux)
+	corsHandler := cors.AllowAll().Handler(mux)
 	err := http.ListenAndServe(fullAddress, corsHandler)
 	if err != nil {
 		log.Fatalf("[-] Failed to start server: %v", err)
