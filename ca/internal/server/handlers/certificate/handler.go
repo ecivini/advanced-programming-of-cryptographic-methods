@@ -83,8 +83,10 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	fmt.Println("[+] Validated key type ", requestBody.KeyType)
 
 	// Validate key type
-	block, _ := pem.Decode([]byte(requestBody.PublicKeyPEM))
+	block, err1 := pem.Decode([]byte(requestBody.PublicKeyPEM))
 	publicKeyBytes := block.Bytes
+	log.Printf("Public key PEM: %v", publicKeyBytes)
+	log.Printf("error while decoding public key: %v", err1)
 	if ValidatePublicKey(publicKeyBytes) == nil {
 		fmt.Println("[-] Error while parsing public key")
 		response := map[string]string{
@@ -256,19 +258,25 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 func ValidatePublicKey(publicKeyDer []byte) crypto.PublicKey {
 	pub, err := x509.ParsePKIXPublicKey(publicKeyDer)
 	if err != nil {
-		return nil
+		pub, err = x509.ParsePKCS1PublicKey(publicKeyDer)
+		if err != nil {
+			log.Printf("[-] Error while parsing public key: %v", err)
+			return nil
+		}
 	}
 
 	switch key := pub.(type) {
 	case *ecdsa.PublicKey:
 		return key
 	case *rsa.PublicKey:
-		if key.Size() < 2048 {
+		if key.Size() < 256 {
+			log.Printf("[-] RSA public key is too small: %d bits", key.Size()*8)
 			return nil
 		}
 		return key
 	}
 
+	log.Printf("[-] Unsupported public key type: %T", pub)
 	return nil
 }
 
