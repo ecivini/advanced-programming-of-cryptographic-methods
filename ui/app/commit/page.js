@@ -16,7 +16,6 @@ export default function CommitPage() {
         setStatus('Error: Invalid key type selected.');
         return;
       }
-
       const IdUrl = process.env.NEXT_PUBLIC_CA_URL + '/v1/identity';
       const res = await fetch(IdUrl, {
         method: 'PUT',
@@ -35,6 +34,16 @@ export default function CommitPage() {
     }
   };
 
+  const handlePubkeyFile = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    setPubkey(event.target.result);
+  };
+  reader.readAsText(file);
+};
+
   return (
     <div className="max-w-xl mx-auto p-6">
       <h2 className="text-2xl font-semibold mb-4">Submit Identity</h2>
@@ -50,13 +59,18 @@ export default function CommitPage() {
           />
         </div>
         <div>
-          <label className="block font-medium">Public Key (PEM)</label>
+          <label className="block font-medium">Public Key (PEM format)</label>
           <textarea
             required
-            className="w-full mt-1 h-40 p-2 border rounded font-mono"
+            rows={8}
+            className="w-full mt-1 p-2 border rounded font-mono"
+            placeholder={`-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----`}
             value={pubkey}
             onChange={e => setPubkey(e.target.value)}
           />
+          <small className="text-gray-500">
+            Paste your PEM-encoded public key here, including the BEGIN/END lines.
+          </small>
         </div>
         <div>
           <label className="block font-medium">Key Type</label>
