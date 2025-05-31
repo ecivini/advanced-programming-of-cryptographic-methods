@@ -50,7 +50,7 @@ useEffect(() => {
   return (
     <div className="max-w-2xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4 text-center">Certificate Authority Information</h1>
-      <pre className="bg-green-100 p-4 rounded-lg whitespace-pre-wrap break-words text-sm mx-auto text-center max-w-md">
+      <pre className="bg-green-100 p-4 rounded-lg whitespace-pre-wrap break-words text-sm mx-auto  max-w-md">
         {caInfo && caInfo["public_key"]?.replaceAll('\\n', '\n')}
       </pre>
       {/* Button to copy the public key */}
