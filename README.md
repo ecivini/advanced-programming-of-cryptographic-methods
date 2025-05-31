@@ -29,7 +29,7 @@ During the first startup, the server will automatically create a new root keypai
 $ docker container rm local-kms
 ```
 
-## Test
+## Test: ECDSA
 
 Start by creating a private key, in this case for ECDSA:
 ```bash
@@ -42,4 +42,19 @@ $ openssl ec -in priv-key.pem -pubout > pub-key.pem
 Sign the challenge:
 ```bash
 $ cat challenge.txt | base64 -d > challenge_raw.bin && openssl dgst -sha256 -sign priv-key.pem challenge_raw.bin | base64 > signature.txt && rm challenge_raw.bin 
+```
+
+## Test: RSA
+
+Start by creating a private key, in this case for RSA:
+```bash
+$ openssl genrsa -out priv-key-rsa.pem 4096
+```
+Extract the associated public key:
+```bash
+$ openssl rsa -in priv-key-rsa.pem -pubout -out pub-key-rsa.pem
+```
+Sign the challenge:
+```bash
+$ cat challenge.txt | base64 -d > challenge_raw.bin && openssl dgst -sha256 -sign priv-key-rsa.pem challenge_raw.bin | base64 > signature.txt && rm challenge_raw.bin 
 ```
