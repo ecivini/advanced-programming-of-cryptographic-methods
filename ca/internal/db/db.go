@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"math/big"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -19,6 +20,27 @@ func RetrieveIdentityCommittment(client *mongo.Client, challenge string) (*Ident
 	filter := bson.M{"challenge": challenge}
 
 	var result IdentityCommitment
+	err := collection.FindOne(context.Background(), filter, nil).Decode(&result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func StoreCertificateData(client *mongo.Client, certData CertificateData) error {
+	collection := client.Database("ca").Collection("certificates_data")
+	_, err := collection.InsertOne(context.Background(), certData)
+
+	return err
+}
+
+func RetrieveCertificateData(client *mongo.Client, serial big.Int) (*CertificateData, error) {
+	collection := client.Database("ca").Collection("certificates_data")
+	filter := bson.M{"serial_number": serial}
+
+	var result CertificateData
 	err := collection.FindOne(context.Background(), filter, nil).Decode(&result)
 
 	if err != nil {

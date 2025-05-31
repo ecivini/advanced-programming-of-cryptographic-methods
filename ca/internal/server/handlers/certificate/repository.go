@@ -116,8 +116,19 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 
 	pemData := pem.EncodeToMemory(pemBlock)
 
-	return pemData, nil
+	// Store certificate data
+	certData := db.CertificateData{
+		SerialNumber: *serialNumber,
+		ValidFrom:    primitive.NewDateTimeFromTime(time.Now()),
+		ValidUntil:   primitive.NewDateTimeFromTime(oneYearFromNow),
+		Revoked:      false,
+	}
+	err = db.StoreCertificateData(repo.db, certData)
+	if err != nil {
+		return nil, err
+	}
 
+	return pemData, nil
 }
 
 func (repo *CertificateRepository) GetCommitmentFromChallenge(challenge string) *db.IdentityCommitment {

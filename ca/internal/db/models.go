@@ -1,7 +1,7 @@
 package db
 
 import (
-	"io"
+	"math/big"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -17,30 +17,10 @@ type IdentityCommitment struct {
 	Proof        []byte             `bson:"signature,omitempty"`
 }
 
-type RevocatedCertificate struct {
-	ID             primitive.ObjectID `bson:"_id,omitempty"`
-	CertificateId  string             `bson:"certificate_id,omitempty"`
-	RevocationDate string             `bson:"revocation_date,omitempty"`
-}
-
-type IssuedCertificate struct {
-	ID                primitive.ObjectID `bson:"_id,omitempty"`
-	Challenge         string             `bson:"challenge,omitempty"`
-	Email             string             `bson:"email,omitempty"`
-	PublicKey         []byte             `bson:"public_key,omitempty"`
-	ChallengedAt      primitive.DateTime `bson:"challenged_at,omitempty"`
-	VerifiedAt        primitive.DateTime `bson:"verified_at,omitempty"`
-	VerifiedSignature []byte             `bson:"signature,omitempty"`
-	ValidFrom         primitive.DateTime `bson:"valid_from,omitempty"`
-	ValidUntil        primitive.DateTime `bson:"valid_until,omitempty"`
-	RawCertificate    []byte             `bson:"raw_certificate,omitempty"`
-}
-
-func (i *IssuedCertificate) Sign(rand io.Reader, template *IssuedCertificate, parent *IssuedCertificate, pub interface{}, priv interface{}) ([]byte, error) {
-	// Add logic to sign the certificate
-	panic("unimplemented")
-}
-
-func GenerateChallenge() string {
-	panic("unimplemented")
+type CertificateData struct {
+	ID           primitive.ObjectID `bson:"_id,omitempty"`
+	SerialNumber big.Int            `bson:"challenge,omitempty"`
+	ValidFrom    primitive.DateTime `bson:"valid_from,omitempty"`
+	ValidUntil   primitive.DateTime `bson:"valid_until,omitempty"`
+	Revoked      bool               `bson:"revoked,omitempty"`
 }

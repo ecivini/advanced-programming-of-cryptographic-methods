@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"net/http"
 	"slices"
+	"time"
 )
 
 type ECDSASignature struct {
@@ -164,6 +165,18 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	if committedIdentity == nil {
 		response := map[string]string{
 			"error": "No identity commitment found",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Check identity commitment is valid
+	now := time.Now()
+	if committedIdentity.ValidUntil.Time().Before(now) {
+		response := map[string]string{
+			"error": "Commited identity expired",
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
