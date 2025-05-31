@@ -83,10 +83,8 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	fmt.Println("[+] Validated key type ", requestBody.KeyType)
 
 	// Validate key type
-	block, err1 := pem.Decode([]byte(requestBody.PublicKeyPEM))
+	block, _ := pem.Decode([]byte(requestBody.PublicKeyPEM))
 	publicKeyBytes := block.Bytes
-	log.Printf("Public key PEM: %v", publicKeyBytes)
-	log.Printf("error while decoding public key: %v", err1)
 	if ValidatePublicKey(publicKeyBytes) == nil {
 		fmt.Println("[-] Error while parsing public key")
 		response := map[string]string{
