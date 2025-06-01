@@ -181,19 +181,9 @@ func (repo *CertificateRepository) GetRevokedCertificates(page, pageSize int) ([
 	return certificates, nil
 }
 
-// func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
-// 	// Revoke the certificate by serial number
-// 	panic("unimplemented")
-// }
-
 func (repo *CertificateRepository) VerifyChallenge(challenge, response, publicKey []byte) bool {
-	// Use cryptographic methods to verify the response
 	return repo.verifySignature(challenge, response, publicKey)
 }
-
-// func (repo *CertificateRepository) verifySignature(challenge, response, publicKey []byte) bool {
-// 	panic("unimplemented")
-// }
 
 // RevokeCertificateByID revokes a certificate by its serial number
 func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
