@@ -50,6 +50,42 @@ func RetrieveCertificateData(client *mongo.Client, serial big.Int) (*Certificate
 	return &result, nil
 }
 
+func StoreRevokedCertificate(client *mongo.Client, serial big.Int) error {
+	collection := client.Database("ca").Collection("revoked_certificates")
+	_, err := collection.InsertOne(context.Background(), bson.M{"serial_number": serial})
+
+	return err
+}
+
+func RevokeCertificate(client *mongo.Client, serial big.Int) error {
+	collection := client.Database("ca").Collection("certificates_data")
+	_, err := collection.UpdateOne(
+		context.Background(),
+		bson.M{"serial_number": serial},
+		bson.M{"$set": bson.M{"revoked": true}},
+	)
+
+	return err
+}
+
+func GetRevokedCertificates(client *mongo.Client) ([]CertificateData, error) {
+	collection := client.Database("ca").Collection("certificates_data")
+	filter := bson.M{"revoked": true}
+
+	cursor, err := collection.Find(context.Background(), filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var revokedCerts []CertificateData
+	if err = cursor.All(context.Background(), &revokedCerts); err != nil {
+		return nil, err
+	}
+
+	return revokedCerts, nil
+}
+
 // func SaveIssuedCertificate(cert IssuedCertificate) error {
 // 	collection := Client.Database("ca").Collection("issued_certificates")
 // 	_, err := collection.InsertOne(context.Background(), cert)

@@ -3,13 +3,16 @@ package handlers
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"os"
 	"time"
@@ -142,24 +145,152 @@ func (repo *CertificateRepository) GetCommitmentFromChallenge(challenge string) 
 	return commitment
 }
 
-func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
-	// Revoke the certificate by serial number
-	panic("unimplemented")
-}
+// func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
+// 	// Revoke the certificate by serial number
+// 	panic("unimplemented")
+// }
 
 func (repo *CertificateRepository) VerifyChallenge(challenge, response, publicKey []byte) bool {
 	// Use cryptographic methods to verify the response
 	return repo.verifySignature(challenge, response, publicKey)
 }
 
-func (repo *CertificateRepository) verifySignature(challenge, response, publicKey []byte) bool {
-	panic("unimplemented")
+// func (repo *CertificateRepository) verifySignature(challenge, response, publicKey []byte) bool {
+// 	panic("unimplemented")
+// }
+
+// RevokeCertificateByID revokes a certificate by its serial number
+func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
+	// Parse the serial number string to big.Int
+	serialBig := new(big.Int)
+	serialBig, success := serialBig.SetString(serialNumber, 10)
+	if !success {
+		return fmt.Errorf("invalid serial number format: %s", serialNumber)
+	}
+
+	// Update the certificate status in the database
+	err := db.RevokeCertificate(repo.db, *serialBig)
+	if err != nil {
+		return fmt.Errorf("failed to revoke certificate with serial %s: %w", serialNumber, err)
+	}
+
+	log.Printf("[+] Certificate with serial number %s has been revoked", serialNumber)
+	return nil
 }
 
-func (repo *CertificateRepository) ValidatePublicKey(publicKey []byte) error {
-	// Check if the public key has a valid format
-	_, err := x509.ParsePKIXPublicKey(publicKey)
-	return err
+// verifySignature verifies a cryptographic signature against a challenge using the provided public key
+func (repo *CertificateRepository) verifySignature(challenge, response, publicKeyDER []byte) bool {
+	// Parse the public key from DER format
+	publicKey := repo.ValidatePublicKey(publicKeyDER)
+	if publicKey == nil {
+		log.Printf("[-] Invalid public key provided for signature verification")
+		return false
+	}
+
+	switch key := publicKey.(type) {
+	case *ecdsa.PublicKey:
+		return repo.verifyECDSASignature(challenge, response, key)
+	case *rsa.PublicKey:
+		return repo.verifyRSASignature(challenge, response, key)
+	default:
+		log.Printf("[-] Unsupported key type for signature verification: %T", key)
+		return false
+	}
+}
+
+func (repo *CertificateRepository) verifyECDSASignature(challenge, signature []byte, publicKey *ecdsa.PublicKey) bool {
+	// Hash the challenge using SHA-256
+	hash := crypto.SHA256.New()
+	hash.Write(challenge)
+	hashed := hash.Sum(nil)
+
+	// Decode the signature from base64
+	sigBytes, err := base64.StdEncoding.DecodeString(string(signature))
+	if err != nil {
+		log.Printf("[-] Failed to decode ECDSA signature: %v", err)
+		return false
+	}
+
+	// Parse the signature (assuming ASN.1 DER format)
+	// For ECDSA, we need to extract r and s values
+	if len(sigBytes) < 8 { // Minimum reasonable size for ECDSA signature
+		log.Printf("[-] ECDSA signature too short")
+		return false
+	}
+
+	// Simple parsing assuming r and s are equal length and concatenated
+	// In production, you'd want proper ASN.1 DER parsing
+	sigLen := len(sigBytes)
+	if sigLen%2 != 0 {
+		log.Printf("[-] Invalid ECDSA signature length")
+		return false
+	}
+
+	rBytes := sigBytes[:sigLen/2]
+	sBytes := sigBytes[sigLen/2:]
+
+	r := new(big.Int).SetBytes(rBytes)
+	s := new(big.Int).SetBytes(sBytes)
+
+	// Verify the signature
+	valid := ecdsa.Verify(publicKey, hashed, r, s)
+	if !valid {
+		log.Printf("[-] ECDSA signature verification failed")
+	}
+
+	return valid
+}
+
+func (repo *CertificateRepository) verifyRSASignature(challenge, signature []byte, publicKey *rsa.PublicKey) bool {
+	// Hash the challenge using SHA-256
+	hash := crypto.SHA256.New()
+	hash.Write(challenge)
+	hashed := hash.Sum(nil)
+
+	// Decode the signature from base64
+	sigBytes, err := base64.StdEncoding.DecodeString(string(signature))
+	if err != nil {
+		log.Printf("[-] Failed to decode RSA signature: %v", err)
+		return false
+	}
+
+	// Verify the signature using PSS padding (recommended for new applications)
+	err = rsa.VerifyPSS(publicKey, crypto.SHA256, hashed, sigBytes, nil)
+	if err != nil {
+		// Try PKCS#1 v1.5 as fallback
+		err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed, sigBytes)
+		if err != nil {
+			log.Printf("[-] RSA signature verification failed: %v", err)
+			return false
+		}
+	}
+
+	return true
+}
+
+func (repo *CertificateRepository) ValidatePublicKey(publicKey []byte) crypto.PublicKey {
+	pub, err := x509.ParsePKIXPublicKey(publicKey)
+	if err != nil {
+		pub, err = x509.ParsePKCS1PublicKey(publicKey)
+		if err != nil {
+			log.Printf("[-] Error while parsing public key: %v", err)
+			return nil
+		}
+	}
+
+	switch key := pub.(type) {
+	case *ecdsa.PublicKey:
+		return key
+	case *rsa.PublicKey:
+		if key.Size() < 256 {
+			log.Printf("[-] RSA public key is too small: %d bits", key.Size()*8)
+			return nil
+		}
+		return key
+	}
+
+	log.Printf("[-] Unsupported public key type: %T", pub)
+	return nil
 }
 
 func GenerateChallenge() string {
