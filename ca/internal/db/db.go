@@ -50,22 +50,21 @@ func RetrieveCertificateData(client *mongo.Client, serial big.Int) (*Certificate
 	return &result, nil
 }
 
-func StoreRevokedCertificate(client *mongo.Client, serial big.Int) error {
-	collection := client.Database("ca").Collection("revoked_certificates")
-	_, err := collection.InsertOne(context.Background(), bson.M{"serial_number": serial})
-
-	return err
-}
-
 func RevokeCertificate(client *mongo.Client, serial big.Int) error {
 	collection := client.Database("ca").Collection("certificates_data")
-	_, err := collection.UpdateOne(
-		context.Background(),
-		bson.M{"serial_number": serial},
-		bson.M{"$set": bson.M{"revoked": true}},
-	)
 
-	return err
+	filter := bson.M{"serial_number": serial}
+	update := bson.M{"$set": bson.M{"revoked": true}}
+
+	result, err := collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
 }
 
 func GetRevokedCertificates(client *mongo.Client) ([]CertificateData, error) {
