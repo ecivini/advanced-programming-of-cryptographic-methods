@@ -5,9 +5,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -18,10 +16,6 @@ import (
 	"slices"
 	"time"
 )
-
-type ECDSASignature struct {
-	R, S *big.Int
-}
 
 var SupportedKeyTypes = []string{
 	"ECDSA",
@@ -192,31 +186,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	// Verify signature
-	var signatureValid bool
-	if committedIdentity.KeyType == "ECDSA" {
-		publicKeyDerAny, _ := x509.ParsePKIXPublicKey(committedIdentity.PublicKeyDER)
-		ecdsaKey := publicKeyDerAny.(*ecdsa.PublicKey)
-		var signature ECDSASignature
-		_, err = asn1.Unmarshal(signatureBytes, &signature)
-		if err != nil {
-			panic(err)
-		}
-
-		hashedChallenge := sha256.Sum256(challenge)
-		signatureValid = ecdsa.Verify(ecdsaKey, hashedChallenge[:], signature.R, signature.S)
-	} else {
-		publicKeyDerAny, _ := x509.ParsePKIXPublicKey(committedIdentity.PublicKeyDER)
-		rsaKey := publicKeyDerAny.(*rsa.PublicKey)
-
-		hashedChallenge := sha256.Sum256(challenge)
-		err = rsa.VerifyPKCS1v15(rsaKey, crypto.SHA256, hashedChallenge[:], signatureBytes)
-		if err != nil {
-			fmt.Printf("[-] Error while verifying RSA signature: %s\n", err)
-			signatureValid = false
-		} else {
-			signatureValid = true
-		}
-	}
+	signatureValid := h.repo.verifySignature(challenge, signatureBytes, committedIdentity.PublicKeyDER)
 	if !signatureValid {
 		response := map[string]string{
 			"error": "Invalid signature",
@@ -228,7 +198,9 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	//Cenerate certificate
-	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, committedIdentity.ReservedSerialNumber)
+	serialNumber := new(big.Int)
+	serialNumber, _ = serialNumber.SetString(committedIdentity.ReservedSerialNumber, 10)
+	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, serialNumber)
 	if err != nil {
 		fmt.Printf("[-] Unable to create certificate: %s\n", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
@@ -253,13 +225,6 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	serialNumber := new(big.Int)
-	serialNumber, parsed := serialNumber.SetString(requestBody.SerialNumber, 10)
-	if !parsed {
-		http.Error(w, "Unable to parse serial number", http.StatusBadRequest)
-		return
-	}
-
 	signature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
 	if err != nil {
 		http.Error(w, "Unable to parse signature", http.StatusBadRequest)
@@ -267,7 +232,7 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	// Retrieve identity commitment based on the serial number
-	commitment := h.repo.GetCommitmentFromReservedSerialNumber(*serialNumber)
+	commitment := h.repo.GetCommitmentFromReservedSerialNumber(requestBody.SerialNumber)
 	if commitment == nil {
 		http.Error(w, "Invalid serial number", http.StatusBadRequest)
 		return
@@ -275,17 +240,15 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 
 	// Verify signature
 	// Expected message is "Revoke: <serial number>"
-	message := []byte("Revoke: " + serialNumber.String())
-	hashedMessage := sha256.Sum256(message)
-
-	signatureValid := h.repo.verifySignature(hashedMessage[:], signature, commitment.PublicKeyDER)
+	message := []byte("Revoke: " + requestBody.SerialNumber)
+	signatureValid := h.repo.verifySignature(message, signature, commitment.PublicKeyDER)
 	if !signatureValid {
 		http.Error(w, "Invalid signature", http.StatusBadRequest)
 		return
 	}
 
 	//Revoke certificate
-	if err := h.repo.RevokeCertificateByID(serialNumber); err != nil {
+	if err := h.repo.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
 		http.Error(w, "Failed to revoke certificate", http.StatusInternalServerError)
 		return
 	}

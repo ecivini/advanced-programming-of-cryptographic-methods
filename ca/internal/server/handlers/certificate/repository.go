@@ -6,8 +6,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -23,6 +25,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+type ECDSASignature struct {
+	R, S *big.Int
+}
+
 type CertificateRepository struct {
 	hsm *hsm.Hsm
 	db  *mongo.Client
@@ -36,7 +42,7 @@ func BuildCertificateRepository(hsm *hsm.Hsm, db *mongo.Client) CertificateRepos
 }
 
 func (repo *CertificateRepository) CreateIdentityCommitment(email string, publicKeyDer []byte, keyType string) string {
-	limit := new(big.Int).Lsh(big.NewInt(1), 2048)
+	limit := new(big.Int).Lsh(big.NewInt(1), 256)
 	serialNumber, err := rand.Int(rand.Reader, limit)
 	if err != nil {
 		return ""
@@ -51,7 +57,7 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 		ValidFrom:            primitive.NewDateTimeFromTime(time.Now()),
 		ValidUntil:           primitive.NewDateTimeFromTime(time.Now().Add(time.Hour * 24)), //  Commitments are valid for one day
 		Proof:                nil,
-		ReservedSerialNumber: *serialNumber,
+		ReservedSerialNumber: serialNumber.String(),
 	}
 
 	//Store the certificate in the database
@@ -63,13 +69,13 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	return commitment.Challenge
 }
 
-func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey, serial big.Int) ([]byte, error) {
+func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey, serial *big.Int) ([]byte, error) {
 	// Create client certificate template
 	now := time.Now()
 	oneYearFromNow := now.Add(time.Hour * 24 * 365)
 
 	clientCertTemplate := &x509.Certificate{
-		SerialNumber: &serial,
+		SerialNumber: serial,
 		Subject: pkix.Name{
 			CommonName: email,
 		},
@@ -120,7 +126,7 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 
 	// Store certificate data
 	certData := db.CertificateData{
-		SerialNumber: serial,
+		SerialNumber: serial.String(),
 		ValidFrom:    primitive.NewDateTimeFromTime(time.Now()),
 		ValidUntil:   primitive.NewDateTimeFromTime(oneYearFromNow),
 		Revoked:      false,
@@ -144,7 +150,7 @@ func (repo *CertificateRepository) GetCommitmentFromChallenge(challenge string) 
 	return commitment
 }
 
-func (repo *CertificateRepository) GetCommitmentFromReservedSerialNumber(serial big.Int) *db.IdentityCommitment {
+func (repo *CertificateRepository) GetCommitmentFromReservedSerialNumber(serial string) *db.IdentityCommitment {
 	commitment, err := db.RetrieveIdentityCommittmentFromReservedSerial(repo.db, serial)
 
 	if err != nil {
@@ -170,9 +176,9 @@ func (repo *CertificateRepository) VerifyChallenge(challenge, response, publicKe
 // }
 
 // RevokeCertificateByID revokes a certificate by its serial number
-func (repo *CertificateRepository) RevokeCertificateByID(serialNumber *big.Int) error {
+func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
 	// Update the certificate status in the database
-	err := db.RevokeCertificate(repo.db, *serialNumber)
+	err := db.RevokeCertificate(repo.db, serialNumber)
 	if err != nil {
 		return fmt.Errorf("failed to revoke certificate with serial %s: %w", serialNumber, err)
 	}
@@ -182,7 +188,7 @@ func (repo *CertificateRepository) RevokeCertificateByID(serialNumber *big.Int) 
 }
 
 // verifySignature verifies a cryptographic signature against a challenge using the provided public key
-func (repo *CertificateRepository) verifySignature(challenge, response, publicKeyDER []byte) bool {
+func (repo *CertificateRepository) verifySignature(message, response, publicKeyDER []byte) bool {
 	// Parse the public key from DER format
 	publicKey := repo.ValidatePublicKey(publicKeyDER)
 	if publicKey == nil {
@@ -192,63 +198,29 @@ func (repo *CertificateRepository) verifySignature(challenge, response, publicKe
 
 	switch key := publicKey.(type) {
 	case *ecdsa.PublicKey:
-		return repo.verifyECDSASignature(challenge, response, key)
+		return repo.verifyECDSASignature(message, response, key)
 	case *rsa.PublicKey:
-		return repo.verifyRSASignature(challenge, response, key)
+		return repo.verifyRSASignature(message, response, key)
 	default:
 		log.Printf("[-] Unsupported key type for signature verification: %T", key)
 		return false
 	}
 }
 
-func (repo *CertificateRepository) verifyECDSASignature(challenge, signature []byte, publicKey *ecdsa.PublicKey) bool {
-	// Hash the challenge using SHA-256
-	hash := crypto.SHA256.New()
-	hash.Write(challenge)
-	hashed := hash.Sum(nil)
-
-	// Decode the signature from base64
-	sigBytes, err := base64.StdEncoding.DecodeString(string(signature))
+func (repo *CertificateRepository) verifyECDSASignature(message, rawSignature []byte, publicKey *ecdsa.PublicKey) bool {
+	var signature ECDSASignature
+	_, err := asn1.Unmarshal(rawSignature, &signature)
 	if err != nil {
 		log.Printf("[-] Failed to decode ECDSA signature: %v", err)
 		return false
 	}
 
-	// Parse the signature (assuming ASN.1 DER format)
-	// For ECDSA, we need to extract r and s values
-	if len(sigBytes) < 8 { // Minimum reasonable size for ECDSA signature
-		log.Printf("[-] ECDSA signature too short")
-		return false
-	}
-
-	// Simple parsing assuming r and s are equal length and concatenated
-	// In production, you'd want proper ASN.1 DER parsing
-	sigLen := len(sigBytes)
-	if sigLen%2 != 0 {
-		log.Printf("[-] Invalid ECDSA signature length")
-		return false
-	}
-
-	rBytes := sigBytes[:sigLen/2]
-	sBytes := sigBytes[sigLen/2:]
-
-	r := new(big.Int).SetBytes(rBytes)
-	s := new(big.Int).SetBytes(sBytes)
-
-	// Verify the signature
-	valid := ecdsa.Verify(publicKey, hashed, r, s)
-	if !valid {
-		log.Printf("[-] ECDSA signature verification failed")
-	}
-
-	return valid
+	hashedMessage := sha256.Sum256(message)
+	return ecdsa.Verify(publicKey, hashedMessage[:], signature.R, signature.S)
 }
 
-func (repo *CertificateRepository) verifyRSASignature(challenge, signature []byte, publicKey *rsa.PublicKey) bool {
-	// Hash the challenge using SHA-256
-	hash := crypto.SHA256.New()
-	hash.Write(challenge)
-	hashed := hash.Sum(nil)
+func (repo *CertificateRepository) verifyRSASignature(message, signature []byte, publicKey *rsa.PublicKey) bool {
+	hashedMessage := sha256.Sum256(message)
 
 	// Decode the signature from base64
 	sigBytes, err := base64.StdEncoding.DecodeString(string(signature))
@@ -258,10 +230,10 @@ func (repo *CertificateRepository) verifyRSASignature(challenge, signature []byt
 	}
 
 	// Verify the signature using PSS padding (recommended for new applications)
-	err = rsa.VerifyPSS(publicKey, crypto.SHA256, hashed, sigBytes, nil)
+	err = rsa.VerifyPSS(publicKey, crypto.SHA256, hashedMessage[:], sigBytes, nil)
 	if err != nil {
 		// Try PKCS#1 v1.5 as fallback
-		err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed, sigBytes)
+		err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashedMessage[:], sigBytes)
 		if err != nil {
 			log.Printf("[-] RSA signature verification failed: %v", err)
 			return false
