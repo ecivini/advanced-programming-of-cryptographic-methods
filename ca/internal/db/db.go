@@ -29,6 +29,20 @@ func RetrieveIdentityCommittment(client *mongo.Client, challenge string) (*Ident
 	return &result, nil
 }
 
+func RetrieveIdentityCommittmentFromReservedSerial(client *mongo.Client, serial big.Int) (*IdentityCommitment, error) {
+	collection := client.Database("ca").Collection("identity_commitments")
+	filter := bson.M{"reserved_serial_number": serial}
+
+	var result IdentityCommitment
+	err := collection.FindOne(context.Background(), filter, nil).Decode(&result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
 func StoreCertificateData(client *mongo.Client, certData CertificateData) error {
 	collection := client.Database("ca").Collection("certificates_data")
 	_, err := collection.InsertOne(context.Background(), certData)

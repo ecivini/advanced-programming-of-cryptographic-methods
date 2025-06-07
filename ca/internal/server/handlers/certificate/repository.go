@@ -10,7 +10,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -37,19 +36,26 @@ func BuildCertificateRepository(hsm *hsm.Hsm, db *mongo.Client) CertificateRepos
 }
 
 func (repo *CertificateRepository) CreateIdentityCommitment(email string, publicKeyDer []byte, keyType string) string {
+	limit := new(big.Int).Lsh(big.NewInt(1), 2048)
+	serialNumber, err := rand.Int(rand.Reader, limit)
+	if err != nil {
+		return ""
+	}
+
 	commitment := db.IdentityCommitment{
-		ID:           primitive.NewObjectID(),
-		Challenge:    GenerateChallenge(),
-		Email:        email,
-		PublicKeyDER: publicKeyDer,
-		KeyType:      keyType,
-		ValidFrom:    primitive.NewDateTimeFromTime(time.Now()),
-		ValidUntil:   primitive.NewDateTimeFromTime(time.Now().Add(time.Hour * 24)), //  Commitments are valid for one day
-		Proof:        nil,
+		ID:                   primitive.NewObjectID(),
+		Challenge:            GenerateChallenge(),
+		Email:                email,
+		PublicKeyDER:         publicKeyDer,
+		KeyType:              keyType,
+		ValidFrom:            primitive.NewDateTimeFromTime(time.Now()),
+		ValidUntil:           primitive.NewDateTimeFromTime(time.Now().Add(time.Hour * 24)), //  Commitments are valid for one day
+		Proof:                nil,
+		ReservedSerialNumber: *serialNumber,
 	}
 
 	//Store the certificate in the database
-	err := db.StoreIdentityCommitment(repo.db, commitment)
+	err = db.StoreIdentityCommitment(repo.db, commitment)
 	if err != nil {
 		fmt.Println("Unable to store identity commitment: ", err)
 	}
@@ -57,20 +63,13 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	return commitment.Challenge
 }
 
-func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey) ([]byte, error) {
+func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey, serial big.Int) ([]byte, error) {
 	// Create client certificate template
 	now := time.Now()
 	oneYearFromNow := now.Add(time.Hour * 24 * 365)
 
-	// Create random serial number
-	limit := new(big.Int).Lsh(big.NewInt(1), 2048)
-	serialNumber, err := rand.Int(rand.Reader, limit)
-	if err != nil {
-		return nil, errors.New("unable to generate serial number")
-	}
-
 	clientCertTemplate := &x509.Certificate{
-		SerialNumber: serialNumber,
+		SerialNumber: &serial,
 		Subject: pkix.Name{
 			CommonName: email,
 		},
@@ -121,7 +120,7 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 
 	// Store certificate data
 	certData := db.CertificateData{
-		SerialNumber: *serialNumber,
+		SerialNumber: serial,
 		ValidFrom:    primitive.NewDateTimeFromTime(time.Now()),
 		ValidUntil:   primitive.NewDateTimeFromTime(oneYearFromNow),
 		Revoked:      false,
@@ -136,6 +135,17 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 
 func (repo *CertificateRepository) GetCommitmentFromChallenge(challenge string) *db.IdentityCommitment {
 	commitment, err := db.RetrieveIdentityCommittment(repo.db, challenge)
+
+	if err != nil {
+		fmt.Println("[-] Unable to retrieve identity commitment: ", err)
+		return nil
+	}
+
+	return commitment
+}
+
+func (repo *CertificateRepository) GetCommitmentFromReservedSerialNumber(serial big.Int) *db.IdentityCommitment {
+	commitment, err := db.RetrieveIdentityCommittmentFromReservedSerial(repo.db, serial)
 
 	if err != nil {
 		fmt.Println("[-] Unable to retrieve identity commitment: ", err)
@@ -160,16 +170,9 @@ func (repo *CertificateRepository) VerifyChallenge(challenge, response, publicKe
 // }
 
 // RevokeCertificateByID revokes a certificate by its serial number
-func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
-	// Parse the serial number string to big.Int
-	serialBig := new(big.Int)
-	serialBig, success := serialBig.SetString(serialNumber, 10)
-	if !success {
-		return fmt.Errorf("invalid serial number format: %s", serialNumber)
-	}
-
+func (repo *CertificateRepository) RevokeCertificateByID(serialNumber *big.Int) error {
 	// Update the certificate status in the database
-	err := db.RevokeCertificate(repo.db, *serialBig)
+	err := db.RevokeCertificate(repo.db, *serialNumber)
 	if err != nil {
 		return fmt.Errorf("failed to revoke certificate with serial %s: %w", serialNumber, err)
 	}

@@ -228,7 +228,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	//Cenerate certificate
-	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey)
+	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, committedIdentity.ReservedSerialNumber)
 	if err != nil {
 		fmt.Printf("[-] Unable to create certificate: %s\n", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
@@ -246,17 +246,49 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SerialNumber string `json:"serial_number"`
+		Signature    string `json:"signature"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// //Revoke certificate
-	// if err := db.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
-	// 	http.Error(w, "Failed to revoke certificate", http.StatusInternalServerError)
-	// 	return
-	// }
+	serialNumber := new(big.Int)
+	serialNumber, parsed := serialNumber.SetString(requestBody.SerialNumber, 10)
+	if !parsed {
+		http.Error(w, "Unable to parse serial number", http.StatusBadRequest)
+		return
+	}
+
+	signature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
+	if err != nil {
+		http.Error(w, "Unable to parse signature", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve identity commitment based on the serial number
+	commitment := h.repo.GetCommitmentFromReservedSerialNumber(*serialNumber)
+	if commitment == nil {
+		http.Error(w, "Invalid serial number", http.StatusBadRequest)
+		return
+	}
+
+	// Verify signature
+	// Expected message is "Revoke: <serial number>"
+	message := []byte("Revoke: " + serialNumber.String())
+	hashedMessage := sha256.Sum256(message)
+
+	signatureValid := h.repo.verifySignature(hashedMessage[:], signature, commitment.PublicKeyDER)
+	if !signatureValid {
+		http.Error(w, "Invalid signature", http.StatusBadRequest)
+		return
+	}
+
+	//Revoke certificate
+	if err := h.repo.RevokeCertificateByID(serialNumber); err != nil {
+		http.Error(w, "Failed to revoke certificate", http.StatusInternalServerError)
+		return
+	}
 
 	//Response
 	response := map[string]string{
