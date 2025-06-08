@@ -21,7 +21,7 @@ import (
 	"ca/internal/db"
 	"ca/internal/hsm"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
@@ -49,13 +49,13 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	}
 
 	commitment := db.IdentityCommitment{
-		ID:                   primitive.NewObjectID(),
+		ID:                   bson.NewObjectID(),
 		Challenge:            GenerateChallenge(),
 		Email:                email,
 		PublicKeyDER:         publicKeyDer,
 		KeyType:              keyType,
-		ValidFrom:            primitive.NewDateTimeFromTime(time.Now()),
-		ValidUntil:           primitive.NewDateTimeFromTime(time.Now().Add(time.Hour * 24)), //  Commitments are valid for one day
+		ValidFrom:            bson.NewDateTimeFromTime(time.Now()),
+		ValidUntil:           bson.NewDateTimeFromTime(time.Now().Add(time.Hour * 24)), //  Commitments are valid for one day
 		Proof:                nil,
 		ReservedSerialNumber: serialNumber.String(),
 	}
@@ -127,8 +127,8 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 	// Store certificate data
 	certData := db.CertificateData{
 		SerialNumber: serial.String(),
-		ValidFrom:    primitive.NewDateTimeFromTime(time.Now()),
-		ValidUntil:   primitive.NewDateTimeFromTime(oneYearFromNow),
+		ValidFrom:    bson.NewDateTimeFromTime(now),
+		ValidUntil:   bson.NewDateTimeFromTime(oneYearFromNow),
 		Revoked:      false,
 	}
 	err = db.StoreCertificateData(repo.db, certData)
@@ -159,6 +159,26 @@ func (repo *CertificateRepository) GetCommitmentFromReservedSerialNumber(serial 
 	}
 
 	return commitment
+}
+
+func (repo *CertificateRepository) GetStatusFromSerialNumber(serial string) *db.CertificateData {
+	certificateData, err := db.RetrieveCertificateData(repo.db, serial)
+	if err != nil {
+		fmt.Println("[-] Unable to retrieve certificate data: ", err)
+		return nil
+	}
+	return certificateData
+}
+
+func (repo *CertificateRepository) GetRevokedCertificates(page, pageSize int) ([]db.CertificateData, error) {
+	// Retrieve revoked certificates from the database with pagination
+	certificates, err := db.GetRevokedCertificates(repo.db, page, pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve revoked certificates: %w", err)
+	}
+
+	log.Printf("[+] Retrieved %d revoked certificates", len(certificates))
+	return certificates, nil
 }
 
 // func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
