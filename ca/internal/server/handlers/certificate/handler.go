@@ -80,7 +80,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	if h.repo.ValidatePublicKey(publicKeyBytes) == nil {
 		fmt.Println("[-] Error while parsing public key")
 		response := map[string]string{
-			"error": "Provided invalid public_key.",
+			"error": "Provided invalid public_key." + string(publicKeyBytes), // For debugging purposes
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -194,7 +194,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	//Cenerate certificate
+	//Generate certificate
 	serialNumber := new(big.Int)
 	serialNumber, _ = serialNumber.SetString(committedIdentity.ReservedSerialNumber, 10)
 	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, serialNumber)
