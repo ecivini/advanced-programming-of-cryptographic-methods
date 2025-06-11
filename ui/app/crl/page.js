@@ -5,20 +5,51 @@ export default function CrlPage() {
   const [crl, setCrl] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    const crlURL = process.env.NEXT_PUBLIC_CA_URL + '/v1/certificate/revoke';
-    fetch(crlURL)
-      .then(res => res.json())
-      .then(data => {
-        setCrl(data);
+    const fetchCRL = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const crlURL = `${process.env.NEXT_PUBLIC_CA_URL}/v1/crl?page=${page}&page_size=${pageSize}`;
+        const res = await fetch(crlURL);
+        
+        if (!res.ok) {
+          if (res.status === 404) {
+            // No more data
+            setHasMore(false);
+            if (page === 1) {
+              setCrl([]);
+            }
+            setLoading(false);
+            return;
+          }
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        const certificates = Array.isArray(data) ? data : [];
+        
+        if (page === 1) {
+          setCrl(certificates);
+        } else {
+          setCrl(prev => [...prev, ...certificates]);
+        }
+        
+        setHasMore(certificates.length === pageSize);
         setLoading(false);
-      })
-      .catch(err => {
+      } catch (err) {
         setError(err.message);
         setLoading(false);
-      });
-  }, []);
+      }
+    };
+
+    fetchCRL();
+  }, [page, pageSize]);
 
   if (loading) {
     return (
@@ -96,10 +127,10 @@ export default function CrlPage() {
               </thead>
               <tbody>
                 {crl.map((entry, index) => (
-                  <tr key={entry.serial || index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                    <td className="py-3 px-4 font-mono text-sm text-slate-800">{entry.serial}</td>
+                  <tr key={entry.serial_number || index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                    <td className="py-3 px-4 font-mono text-sm text-slate-800">{entry.serial_number}</td>
                     <td className="py-3 px-4 text-slate-600">
-                      {entry.revokedAt ? new Date(entry.revokedAt).toLocaleString() : 'N/A'}
+                      {entry.revocation_date ? new Date(entry.revocation_date).toLocaleString() : 'N/A'}
                     </td>
                     <td className="py-3 px-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -113,6 +144,34 @@ export default function CrlPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        
+        {/* Pagination */}
+        {crl.length > 0 && (
+          <div className="mt-6 flex items-center justify-between border-t border-slate-200 pt-6">
+            <div className="text-sm text-slate-600">
+              Showing {crl.length} certificate(s)
+            </div>
+            <div className="flex gap-2">
+              {page > 1 && (
+                <button
+                  onClick={() => setPage(1)}
+                  className="btn btn-secondary"
+                >
+                  Reset
+                </button>
+              )}
+              {hasMore && (
+                <button
+                  onClick={() => setPage(prev => prev + 1)}
+                  disabled={loading}
+                  className="btn btn-primary"
+                >
+                  {loading ? 'Loading...' : 'Load More'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
