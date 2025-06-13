@@ -182,7 +182,19 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		panic("[-] Already stored public key is invalid.")
 	}
 
-	// Verify signature
+	// Verify signature - the challenge from the user should match the stored challenge
+	// The challenge parameter should be the base64 challenge, not decoded
+	if requestBody.Challenge != committedIdentity.Challenge {
+		response := map[string]string{
+			"error": "Challenge mismatch",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Verify signature against the raw challenge bytes
 	signatureValid := h.repo.verifySignature(challenge, signatureBytes, committedIdentity.PublicKeyDER)
 	if !signatureValid {
 		response := map[string]string{
