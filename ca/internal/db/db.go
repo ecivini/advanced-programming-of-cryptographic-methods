@@ -2,10 +2,11 @@ package db
 
 import (
 	"context"
-	"math/big"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func StoreIdentityCommitment(client *mongo.Client, commitment IdentityCommitment) error {
@@ -29,6 +30,20 @@ func RetrieveIdentityCommittment(client *mongo.Client, challenge string) (*Ident
 	return &result, nil
 }
 
+func RetrieveIdentityCommittmentFromReservedSerial(client *mongo.Client, serial string) (*IdentityCommitment, error) {
+	collection := client.Database("ca").Collection("identity_commitments")
+	filter := bson.M{"reserved_serial_number": serial}
+
+	var result IdentityCommitment
+	err := collection.FindOne(context.Background(), filter, nil).Decode(&result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
 func StoreCertificateData(client *mongo.Client, certData CertificateData) error {
 	collection := client.Database("ca").Collection("certificates_data")
 	_, err := collection.InsertOne(context.Background(), certData)
@@ -36,7 +51,7 @@ func StoreCertificateData(client *mongo.Client, certData CertificateData) error 
 	return err
 }
 
-func RetrieveCertificateData(client *mongo.Client, serial big.Int) (*CertificateData, error) {
+func RetrieveCertificateData(client *mongo.Client, serial string) (*CertificateData, error) {
 	collection := client.Database("ca").Collection("certificates_data")
 	filter := bson.M{"serial_number": serial}
 
@@ -48,6 +63,46 @@ func RetrieveCertificateData(client *mongo.Client, serial big.Int) (*Certificate
 	}
 
 	return &result, nil
+}
+
+func RevokeCertificate(client *mongo.Client, serial string) error {
+	collection := client.Database("ca").Collection("certificates_data")
+
+	filter := bson.M{"serial_number": serial}
+	update := bson.M{"$set": bson.M{"revoked": true, "revocation_date": bson.NewDateTimeFromTime(time.Now())}}
+
+	result, err := collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
+}
+
+func GetRevokedCertificates(client *mongo.Client, page, pageSize int) ([]CertificateData, error) {
+	collection := client.Database("ca").Collection("certificates_data")
+	filter := bson.M{"revoked": true}
+
+	skip := (page - 1) * pageSize
+	limit := pageSize
+	opts := options.Find().SetSkip(int64(skip)).SetLimit(int64(limit))
+
+	cursor, err := collection.Find(context.Background(), filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.Background())
+
+	var revokedCerts []CertificateData
+	err = cursor.All(context.Background(), &revokedCerts)
+	if err != nil {
+		return nil, err
+	}
+
+	return revokedCerts, nil
 }
 
 // func SaveIssuedCertificate(cert IssuedCertificate) error {

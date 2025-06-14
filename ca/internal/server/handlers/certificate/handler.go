@@ -2,12 +2,6 @@ package handlers
 
 import (
 	"ca/internal/email"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -16,12 +10,9 @@ import (
 	"math/big"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 )
-
-type ECDSASignature struct {
-	R, S *big.Int
-}
 
 var SupportedKeyTypes = []string{
 	"ECDSA",
@@ -86,10 +77,10 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	// Validate key type
 	block, _ := pem.Decode([]byte(requestBody.PublicKeyPEM))
 	publicKeyBytes := block.Bytes
-	if ValidatePublicKey(publicKeyBytes) == nil {
+	if h.repo.ValidatePublicKey(publicKeyBytes) == nil {
 		fmt.Println("[-] Error while parsing public key")
 		response := map[string]string{
-			"error": "Provided invalid public_key.",
+			"error": "Provided invalid public_key." + string(publicKeyBytes), // For debugging purposes
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -186,37 +177,13 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 
 	challenge, _ := base64.StdEncoding.DecodeString(committedIdentity.Challenge)
 
-	publicKey := ValidatePublicKey(committedIdentity.PublicKeyDER)
+	publicKey := h.repo.ValidatePublicKey(committedIdentity.PublicKeyDER)
 	if publicKey == nil {
 		panic("[-] Already stored public key is invalid.")
 	}
 
-	// Verify signature
-	var signatureValid bool
-	if committedIdentity.KeyType == "ECDSA" {
-		publicKeyDerAny, _ := x509.ParsePKIXPublicKey(committedIdentity.PublicKeyDER)
-		ecdsaKey := publicKeyDerAny.(*ecdsa.PublicKey)
-		var signature ECDSASignature
-		_, err = asn1.Unmarshal(signatureBytes, &signature)
-		if err != nil {
-			panic(err)
-		}
-
-		hashedChallenge := sha256.Sum256(challenge)
-		signatureValid = ecdsa.Verify(ecdsaKey, hashedChallenge[:], signature.R, signature.S)
-	} else {
-		publicKeyDerAny, _ := x509.ParsePKIXPublicKey(committedIdentity.PublicKeyDER)
-		rsaKey := publicKeyDerAny.(*rsa.PublicKey)
-
-		hashedChallenge := sha256.Sum256(challenge)
-		err = rsa.VerifyPKCS1v15(rsaKey, crypto.SHA256, hashedChallenge[:], signatureBytes)
-		if err != nil {
-			fmt.Printf("[-] Error while verifying RSA signature: %s\n", err)
-			signatureValid = false
-		} else {
-			signatureValid = true
-		}
-	}
+	// Verify signature against the raw challenge bytes
+	signatureValid := h.repo.verifySignature(challenge, signatureBytes, committedIdentity.PublicKeyDER)
 	if !signatureValid {
 		response := map[string]string{
 			"error": "Invalid signature",
@@ -227,8 +194,10 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	//Cenerate certificate
-	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey)
+	//Generate certificate
+	serialNumber := new(big.Int)
+	serialNumber, _ = serialNumber.SetString(committedIdentity.ReservedSerialNumber, 10)
+	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, serialNumber)
 	if err != nil {
 		fmt.Printf("[-] Unable to create certificate: %s\n", err)
 		http.Error(w, "Failed to generate certificate", http.StatusInternalServerError)
@@ -246,17 +215,40 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SerialNumber string `json:"serial_number"`
+		Signature    string `json:"signature"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	// //Revoke certificate
-	// if err := db.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
-	// 	http.Error(w, "Failed to revoke certificate", http.StatusInternalServerError)
-	// 	return
-	// }
+	signature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
+	if err != nil {
+		http.Error(w, "Unable to parse signature", http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve identity commitment based on the serial number
+	commitment := h.repo.GetCommitmentFromReservedSerialNumber(requestBody.SerialNumber)
+	if commitment == nil {
+		http.Error(w, "Invalid serial number", http.StatusBadRequest)
+		return
+	}
+
+	// Verify signature
+	// Expected message is "Revoke: <serial number>"
+	message := []byte("Revoke: " + requestBody.SerialNumber)
+	signatureValid := h.repo.verifySignature(message, signature, commitment.PublicKeyDER)
+	if !signatureValid {
+		http.Error(w, "Invalid signature", http.StatusBadRequest)
+		return
+	}
+
+	//Revoke certificate
+	if err := h.repo.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
+		http.Error(w, "Failed to revoke certificate", http.StatusInternalServerError)
+		return
+	}
 
 	//Response
 	response := map[string]string{
@@ -266,29 +258,53 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	json.NewEncoder(w).Encode(response)
 }
 
-func ValidatePublicKey(publicKeyDer []byte) crypto.PublicKey {
-	pub, err := x509.ParsePKIXPublicKey(publicKeyDer)
+func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, r *http.Request) {
+	serial := r.PathValue("serial")
+	if serial == "" {
+		http.Error(w, "Serial number is required", http.StatusBadRequest)
+		return
+	}
+
+	data := h.repo.GetStatusFromSerialNumber(serial)
+	if data == nil {
+		http.Error(w, "Certificate not found", http.StatusNotFound)
+		return
+	}
+	response := map[string]bool{
+		"revoked": data.Revoked,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *http.Request) {
+	page, err := strconv.Atoi(r.URL.Query().Get("page"))
+	if err != nil || page < 1 {
+		http.Error(w, "Invalid page parameter", http.StatusBadRequest)
+		return
+	}
+
+	pageSize, err := strconv.Atoi(r.URL.Query().Get("page_size"))
+	if err != nil || pageSize < 10 || pageSize > 100 {
+		http.Error(w, "Invalid page_size parameter, must be between 10 and 100", http.StatusBadRequest)
+		return
+	}
+
+	revokedCertificates, err := h.repo.GetRevokedCertificates(page, pageSize)
 	if err != nil {
-		pub, err = x509.ParsePKCS1PublicKey(publicKeyDer)
-		if err != nil {
-			log.Printf("[-] Error while parsing public key: %v", err)
-			return nil
+		fmt.Println("[-] Failed to retrieve revocation list:", err)
+		http.Error(w, "Failed to retrieve revocation list", http.StatusInternalServerError)
+		return
+	}
+	response := make([]map[string]string, len(revokedCertificates))
+	for i, cert := range revokedCertificates {
+		response[i] = map[string]string{
+			"serial_number":   cert.SerialNumber,
+			"revocation_date": cert.RevocationDate.Time().Format(time.RFC3339),
 		}
 	}
-
-	switch key := pub.(type) {
-	case *ecdsa.PublicKey:
-		return key
-	case *rsa.PublicKey:
-		if key.Size() < 256 {
-			log.Printf("[-] RSA public key is too small: %d bits", key.Size()*8)
-			return nil
-		}
-		return key
-	}
-
-	log.Printf("[-] Unsupported public key type: %T", pub)
-	return nil
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // func (h *CertificateHandler) GetCertificateHandler(w http.ResponseWriter, r *http.Request) {
