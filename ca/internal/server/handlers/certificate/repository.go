@@ -239,21 +239,14 @@ func (repo *CertificateRepository) verifyECDSASignature(message, rawSignature []
 	return ecdsa.Verify(publicKey, hashedMessage[:], signature.R, signature.S)
 }
 
-func (repo *CertificateRepository) verifyRSASignature(message, signature []byte, publicKey *rsa.PublicKey) bool {
+func (repo *CertificateRepository) verifyRSASignature(message, signatureBytes []byte, publicKey *rsa.PublicKey) bool {
 	hashedMessage := sha256.Sum256(message)
 
-	// Decode the signature from base64
-	sigBytes, err := base64.StdEncoding.DecodeString(string(signature))
-	if err != nil {
-		log.Printf("[-] Failed to decode RSA signature: %v", err)
-		return false
-	}
-
 	// Verify the signature using PSS padding (recommended for new applications)
-	err = rsa.VerifyPSS(publicKey, crypto.SHA256, hashedMessage[:], sigBytes, nil)
+	err := rsa.VerifyPSS(publicKey, crypto.SHA256, hashedMessage[:], signatureBytes, nil)
 	if err != nil {
 		// Try PKCS#1 v1.5 as fallback
-		err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashedMessage[:], sigBytes)
+		err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashedMessage[:], signatureBytes)
 		if err != nil {
 			log.Printf("[-] RSA signature verification failed: %v", err)
 			return false
