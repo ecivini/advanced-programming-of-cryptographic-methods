@@ -103,6 +103,16 @@ body {
   background: var(--border-light);
 }
 
+.btn-danger {
+  background: var(--error);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
 .input {
   width: 100%;
   padding: 0.75rem 1rem;

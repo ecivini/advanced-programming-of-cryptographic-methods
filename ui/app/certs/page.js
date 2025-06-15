@@ -2,11 +2,221 @@
 
 import React, { useState } from 'react';
 
+const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+
+// Import crypto functions from sign page
+function detectKeyType(pem) {
+  const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  const byteLen = (b64.length * 3) / 4;
+  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) return 'ECDSA';
+  if (byteLen > 4000) return 'RSA_4096';
+  if (byteLen > 300) return 'RSA_2048';
+  return 'ECDSA';
+}
+
+function convertPKCS1toPKCS8(pkcs1) {
+  const version = Uint8Array.from([0x02, 0x01, 0x00]);
+  const rsaOID = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86,
+    0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
+  const pkcs1Len = pkcs1.length;
+  let wrapper;
+  if (pkcs1Len < 0x80) {
+    wrapper = Uint8Array.from([0x04, pkcs1Len]);
+  } else if (pkcs1Len < 0x100) {
+    wrapper = Uint8Array.from([0x04, 0x81, pkcs1Len]);
+  } else {
+    wrapper = Uint8Array.from([0x04, 0x82, (pkcs1Len >> 8), (pkcs1Len & 0xff)]);
+  }
+  const content = new Uint8Array([...version, ...rsaOID, ...wrapper, ...pkcs1]);
+  const totalLen = content.length;
+  let seq;
+  if (totalLen < 0x80) {
+    seq = Uint8Array.from([0x30, totalLen]);
+  } else if (totalLen < 0x100) {
+    seq = Uint8Array.from([0x30, 0x81, totalLen]);
+  } else {
+    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
+  }
+  return new Uint8Array([...seq, ...content]);
+}
+
+function convertSEC1toPKCS8(sec1) {
+  const version = Uint8Array.from([0x02, 0x01, 0x00]);
+  const ecOID = Uint8Array.from([0x30, 0x13, 0x06, 0x07, 0x2a, 0x86,
+    0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
+    0xce, 0x3d, 0x03, 0x01, 0x07]);
+  const privOctet = Uint8Array.from([0x04, sec1.length]);
+  const content = new Uint8Array([...version, ...ecOID, ...privOctet, ...sec1]);
+  const totalLen = content.length;
+  let seq;
+  if (totalLen < 0x80) {
+    seq = Uint8Array.from([0x30, totalLen]);
+  } else if (totalLen < 0x100) {
+    seq = Uint8Array.from([0x30, 0x81, totalLen]);
+  } else {
+    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
+  }
+  return new Uint8Array([...seq, ...content]);
+}
+
+function encodeECDSASignatureToDER(r, s) {
+  const encodeInt = (i) => {
+    let start = 0;
+    while (start < i.length && i[start] === 0) start++;
+    let trimmed = i.slice(start) || Uint8Array.from([0]);
+    if (trimmed[0] & 0x80) {
+      const prefixed = new Uint8Array(trimmed.length + 1);
+      prefixed.set([0], 0);
+      prefixed.set(trimmed, 1);
+      trimmed = prefixed;
+    }
+    const len = trimmed.length;
+    return Uint8Array.from([0x02, len, ...trimmed]);
+  };
+  const rDer = encodeInt(r);
+  const sDer = encodeInt(s);
+  const seqLen = rDer.length + sDer.length;
+  const header = seqLen < 0x80
+    ? Uint8Array.from([0x30, seqLen])
+    : Uint8Array.from([0x30, 0x81, seqLen]);
+  return new Uint8Array([...header, ...rDer, ...sDer]);
+}
+
+async function importPrivateKey(pem) {
+  const raw = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  const bin = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
+  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) {
+    const pkcs8 = convertSEC1toPKCS8(bin);
+    return crypto.subtle.importKey(
+      'pkcs8', pkcs8.buffer,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false, ['sign']
+    );
+  }
+  if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
+    const pkcs8 = convertPKCS1toPKCS8(bin);
+    return crypto.subtle.importKey(
+      'pkcs8', pkcs8.buffer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
+      false, ['sign']
+    );
+  }
+  const alg = detectKeyType(pem).startsWith('ECDSA')
+    ? { name: 'ECDSA', namedCurve: 'P-256' }
+    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
+  return crypto.subtle.importKey(
+    'pkcs8', bin.buffer,
+    alg, false, ['sign']
+  );
+}
+
+async function signMessage(pem, message) {
+  const key = await importPrivateKey(pem);
+  const messageBytes = new TextEncoder().encode(message);
+
+  const algParams = key.algorithm.name === 'ECDSA'
+    ? { name: 'ECDSA', hash: { name: 'SHA-256' } }
+    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
+
+  const sigBuffer = await crypto.subtle.sign(algParams, key, messageBytes);
+  const sigBytes = new Uint8Array(sigBuffer);
+
+  if (key.algorithm.name === 'ECDSA') {
+    const half = sigBytes.length / 2;
+    const derSig = encodeECDSASignatureToDER(
+      sigBytes.slice(0, half),
+      sigBytes.slice(half)
+    );
+    return btoa(String.fromCharCode(...derSig));
+  }
+
+  return btoa(String.fromCharCode(...sigBytes));
+}
+
+// Parse ASN.1/DER certificate to extract serial number
+function parseSerialNumber(certificatePEM) {
+  try {
+    const lines = certificatePEM.split('\n');
+    const base64Data = lines
+      .filter(line => !line.startsWith('-----'))
+      .join('')
+      .replace(/\s/g, '');
+    
+    const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    
+    // Simple ASN.1 parsing to find serial number
+    // This is a basic implementation - a full ASN.1 parser would be more robust
+    let offset = 0;
+    
+    // Skip outer SEQUENCE
+    if (binaryData[offset] !== 0x30) throw new Error('Invalid certificate format');
+    offset++;
+    
+    // Skip length
+    if (binaryData[offset] & 0x80) {
+      const lengthBytes = binaryData[offset] & 0x7f;
+      offset += lengthBytes + 1;
+    } else {
+      offset++;
+    }
+    
+    // Skip tbsCertificate SEQUENCE
+    if (binaryData[offset] !== 0x30) throw new Error('Invalid tbsCertificate format');
+    offset++;
+    
+    // Skip length
+    if (binaryData[offset] & 0x80) {
+      const lengthBytes = binaryData[offset] & 0x7f;
+      offset += lengthBytes + 1;
+    } else {
+      offset++;
+    }
+    
+    // Skip version (optional, context-specific [0])
+    if (binaryData[offset] === 0xa0) {
+      offset++;
+      // Skip length
+      if (binaryData[offset] & 0x80) {
+        const lengthBytes = binaryData[offset] & 0x7f;
+        offset += lengthBytes + 1;
+      } else {
+        offset++;
+      }
+      // Skip version value
+      offset += 3; // Usually [02 01 02] for version 3
+    }
+    
+    // Now we should be at the serial number
+    if (binaryData[offset] !== 0x02) throw new Error('Serial number not found');
+    offset++;
+    
+    const serialLength = binaryData[offset];
+    offset++;
+    
+    const serialBytes = binaryData.slice(offset, offset + serialLength);
+    
+    // Convert to decimal string
+    let serialNumber = '';
+    for (let i = 0; i < serialBytes.length; i++) {
+      if (i === 0 && serialBytes[i] === 0) continue; // Skip leading zero
+      serialNumber = (BigInt(serialNumber || '0') * BigInt(256) + BigInt(serialBytes[i])).toString();
+    }
+    
+    return serialNumber || '0';
+  } catch (error) {
+    console.warn('Failed to parse serial number:', error);
+    return null;
+  }
+}
+
 export default function CertsPage() {
   const [certificatePEM, setCertificatePEM] = useState('');
   const [certificateInfo, setCertificateInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [privateKey, setPrivateKey] = useState('');
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [revocationSuccess, setRevocationSuccess] = useState(false);
 
   // Handle file upload for certificate
   const handleFileUpload = (event) => {
@@ -15,6 +225,18 @@ export default function CertsPage() {
       const reader = new FileReader();
       reader.onload = (e) => {
         setCertificatePEM(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  // Handle private key file upload
+  const handlePrivateKeyUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPrivateKey(e.target.result);
       };
       reader.readAsText(file);
     }
@@ -30,16 +252,17 @@ export default function CertsPage() {
     setIsLoading(true);
     setError(null);
     setCertificateInfo(null);
+    setRevocationSuccess(false);
 
     try {
-      // This is a simplified parser - in a real application you'd use a proper ASN.1/X.509 parser
       const lines = certificatePEM.split('\n');
       const base64Data = lines
         .filter(line => !line.startsWith('-----'))
         .join('')
         .replace(/\s/g, '');
 
-      // For demonstration, we'll show basic info that can be extracted
+      const serialNumber = parseSerialNumber(certificatePEM);
+
       const info = {
         format: 'X.509',
         encoding: 'PEM',
@@ -48,7 +271,8 @@ export default function CertsPage() {
         hasBeginMarker: certificatePEM.includes('-----BEGIN CERTIFICATE-----'),
         hasEndMarker: certificatePEM.includes('-----END CERTIFICATE-----'),
         isValid: certificatePEM.includes('-----BEGIN CERTIFICATE-----') && 
-                certificatePEM.includes('-----END CERTIFICATE-----')
+                certificatePEM.includes('-----END CERTIFICATE-----'),
+        serialNumber: serialNumber
       };
 
       setCertificateInfo(info);
@@ -60,13 +284,74 @@ export default function CertsPage() {
   };
 
   // Copy to clipboard
-  const copyToClipboard = async (text, successMessage) => {
+  const copyToClipboard = async (text, successMessage = 'Copied to clipboard') => {
     try {
       await navigator.clipboard.writeText(text);
-      // Simple success indication - could be improved with toast notifications
       setError(null);
+      // Show success feedback briefly
+      const originalError = error;
+      setError(`✅ ${successMessage}`);
+      setTimeout(() => setError(originalError), 2000);
     } catch (err) {
       setError(`Failed to copy: ${err.message}`);
+    }
+  };
+
+  // Format serial number for display (first 3 and last 3 digits with ellipsis)
+  const formatSerialNumber = (serialNumber) => {
+    if (!serialNumber || serialNumber.length <= 6) {
+      return serialNumber;
+    }
+    return `${serialNumber.slice(0, 3)}...${serialNumber.slice(-3)}`;
+  };
+
+  // Revoke certificate
+  const revokeCertificate = async () => {
+    if (!certificateInfo || !certificateInfo.serialNumber || !privateKey.trim()) {
+      setError('Please provide both a valid certificate and your private key');
+      return;
+    }
+
+    setIsRevoking(true);
+    setError(null);
+    setRevocationSuccess(false);
+
+    try {
+      // Create the revocation message
+      const revocationMessage = `Revoke: ${certificateInfo.serialNumber}`;
+      
+      // Sign the revocation message
+      const signature = await signMessage(privateKey, revocationMessage);
+
+      // Send revocation request to CA
+      const response = await fetch(`${CA_URL}/v1/certificate/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serial_number: certificateInfo.serialNumber,
+          signature: signature
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage;
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const errorData = await response.json();
+          errorMessage = errorData.error || JSON.stringify(errorData);
+        } else {
+          errorMessage = await response.text();
+        }
+        throw new Error(errorMessage || `Revocation failed: HTTP ${response.status}`);
+      }
+
+      setRevocationSuccess(true);
+      setError('✅ Certificate revoked successfully!');
+    } catch (error) {
+      console.error('Certificate revocation error:', error);
+      setError(`❌ Revocation failed: ${error.message}`);
+    } finally {
+      setIsRevoking(false);
     }
   };
 
@@ -178,7 +463,7 @@ export default function CertsPage() {
           )}
 
           {certificateInfo && (
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-3 rounded-lg">
                   <label className="text-sm font-medium text-slate-600">Format</label>
@@ -210,6 +495,28 @@ export default function CertsPage() {
                 </div>
               </div>
 
+              {/* Serial Number Display */}
+              {certificateInfo.serialNumber && (
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-sm font-medium text-slate-600">Serial Number</label>
+                    <button
+                      onClick={() => copyToClipboard(certificateInfo.serialNumber, 'Serial number copied!')}
+                      className="btn btn-secondary text-xs"
+                      title="Copy full serial number"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Copy Full
+                    </button>
+                  </div>
+                  <p className="text-slate-800 font-mono text-sm break-all">
+                    {formatSerialNumber(certificateInfo.serialNumber)}
+                  </p>
+                </div>
+              )}
+
               <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
                 <h3 className="text-sm font-medium text-blue-800 mb-2">Format Validation</h3>
                 <div className="space-y-1 text-sm">
@@ -240,6 +547,90 @@ export default function CertsPage() {
                 </div>
               </div>
 
+              {/* Revocation Section */}
+              {certificateInfo.isValid && certificateInfo.serialNumber && !revocationSuccess && (
+                <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-red-800 mb-3 flex items-center">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    Revoke Certificate
+                  </h3>
+                  <p className="text-sm text-red-700 mb-4">
+                    To revoke this certificate, you need to sign the revocation message with your private key.
+                    Message to sign: <code className="bg-red-100 px-1 rounded">Revoke: {certificateInfo.serialNumber}</code>
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-red-800 mb-2">Private Key (PEM format)</label>
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="file"
+                          accept=".pem,.key,.txt"
+                          onChange={handlePrivateKeyUpload}
+                          className="hidden"
+                          id="privateKeyFileInput"
+                          disabled={isRevoking}
+                        />
+                        <label
+                          htmlFor="privateKeyFileInput"
+                          className={`btn btn-secondary text-sm cursor-pointer ${isRevoking ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                          </svg>
+                          Upload Key
+                        </label>
+                        <span className="text-xs text-red-600 self-center">or paste below</span>
+                      </div>
+                      <textarea
+                        rows={4}
+                        className="input font-mono resize-none text-sm"
+                        placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                        value={privateKey}
+                        onChange={(e) => setPrivateKey(e.target.value)}
+                        disabled={isRevoking}
+                      />
+                    </div>
+                    
+                    <button
+                      onClick={revokeCertificate}
+                      disabled={isRevoking || !privateKey.trim()}
+                      className={`btn btn-danger w-full ${
+                        isRevoking || !privateKey.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    >
+                      {isRevoking ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Revoking Certificate...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Revoke Certificate
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Success message for revocation */}
+              {revocationSuccess && (
+                <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                  <div className="flex items-center">
+                    <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-green-800 font-medium">Certificate has been successfully revoked</span>
+                  </div>
+                </div>
+              )}
+
               <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
                 <div className="flex items-start">
                   <svg className="w-5 h-5 text-amber-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -247,7 +638,7 @@ export default function CertsPage() {
                   </svg>
                   <div>
                     <h3 className="text-sm font-medium text-amber-800 mb-1">Note</h3>
-                    <p className="text-sm text-amber-700">This is a basic certificate format validator. For detailed certificate analysis including subject, issuer, validity dates, and extensions, a full ASN.1/X.509 parser would be required.</p>
+                    <p className="text-sm text-amber-700">This is a basic certificate format validator with serial number extraction. For detailed certificate analysis including subject, issuer, validity dates, and extensions, a full ASN.1/X.509 parser would be required.</p>
                   </div>
                 </div>
               </div>
