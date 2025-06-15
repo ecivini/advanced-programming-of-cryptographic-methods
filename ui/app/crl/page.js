@@ -6,7 +6,7 @@ export default function CrlPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize] = useState(100);
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
@@ -79,7 +79,7 @@ export default function CrlPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4">
       <div className="text-center mb-8">
         <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-2xl mb-4">
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -90,7 +90,7 @@ export default function CrlPage() {
         <p className="text-slate-600">View certificates that have been revoked by the Certificate Authority</p>
       </div>
 
-      <div className="card p-8">
+      <div className="card p-10">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold text-slate-800 mb-2">Revoked Certificates</h2>
@@ -116,24 +116,24 @@ export default function CrlPage() {
             <p className="text-slate-600">All issued certificates are currently valid and active.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="w-full">
+            <table className="w-full table-auto">
               <thead>
                 <tr className="border-b border-slate-200">
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Serial Number</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Revocation Date</th>
-                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Status</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 w-1/2">Serial Number</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 w-1/3">Revocation Date</th>
+                  <th className="text-left py-4 px-6 font-semibold text-slate-700 w-1/6">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {crl.map((entry, index) => (
                   <tr key={entry.serial_number || index} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                    <td className="py-3 px-4 font-mono text-sm text-slate-800">{entry.serial_number}</td>
-                    <td className="py-3 px-4 text-slate-600">
+                    <td className="py-4 px-6 font-mono text-sm text-slate-800 break-all">{entry.serial_number}</td>
+                    <td className="py-4 px-6 text-slate-600 whitespace-nowrap">
                       {entry.revocation_date ? new Date(entry.revocation_date).toLocaleString() : 'N/A'}
                     </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    <td className="py-4 px-6">
+                      <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
                         <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                         </svg>
@@ -149,17 +149,20 @@ export default function CrlPage() {
         
         {/* Pagination */}
         {crl.length > 0 && (
-          <div className="mt-6 flex items-center justify-between border-t border-slate-200 pt-6">
+          <div className="mt-8 flex items-center justify-between border-t border-slate-200 pt-8">
             <div className="text-sm text-slate-600">
               Showing {crl.length} certificate(s)
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               {page > 1 && (
                 <button
                   onClick={() => setPage(1)}
                   className="btn btn-secondary"
                 >
-                  Reset
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                  </svg>
+                  Reset to First Page
                 </button>
               )}
               {hasMore && (
@@ -168,7 +171,19 @@ export default function CrlPage() {
                   disabled={loading}
                   className="btn btn-primary"
                 >
-                  {loading ? 'Loading...' : 'Load More'}
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Load More Certificates
+                    </>
+                  )}
                 </button>
               )}
             </div>
