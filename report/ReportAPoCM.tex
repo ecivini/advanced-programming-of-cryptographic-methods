@@ -1,0 +1,146 @@
+% -----------------------------------------------------------------------------------------|
+\documentclass[a4paper,11pt,titlepage,twoside,openany]{book}
+
+% draft: comando che mostra i problemi di sillabazione e giustificazione con un quadratino nero, inoltre non carica le immagini, così compila più velocemente VA TOLTO PRIMA DI CONSEGNARE O PER VISUALIZZARE LE IMMAGINI
+
+%
+\input{Doc/packages} % importo pacchetti
+\singlespacing
+%
+\begin{document}
+%%%
+%
+%-----------------------|
+%                       |
+%       TITLE PAGE      |
+%                       |
+%-----------------------|
+%
+%%%
+  \newgeometry{outer=2cm,inner=2cm,top=2cm,bottom=2cm, hmarginratio=1:1} 
+  \pagenumbering{gobble} 
+  \input{Doc/pagina_iniziale}
+  \clearpage
+%  
+%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%
+%------------------------|
+%                        |
+%         INDICE         |
+%                        |
+%------------------------|
+%
+%%%
+    \mainmatter
+    \newgeometry{outer=2cm,inner=2.6cm,top=2.5cm,bottom=2.5cm, foot = 1.2cm}
+    \tableofcontents
+    \clearpage 
+    \newpage
+%----------------------------------------------------------------------------------|
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % gruppo per definizone di successione capitoli senza interruzione di pagina
+    \begingroup
+      % nessuna interruzione di pagina tra capitoli
+      
+     \makeatletter
+     \patchcmd{\chapter}{\if@openright\cleardoublepage\else\clearpage\fi}{\par}{}{}
+     \makeatother
+      
+      % redefinizione del formato del titolo del capitolo
+      % da formato
+      %   Capitolo X
+      %   Titolo capitolo
+      % a formato
+      %   X   Titolo capitolo
+
+      \titleformat{\chapter}{\normalfont\Huge\bfseries}{\thechapter}{0.6cm}{}
+        
+      \titlespacing*{\chapter}{0pt}{0.5in}{0.2in} % originale {0pt}{0.59in}{0.02in}
+      \titlespacing*{\section}{0pt}{0.3in}{0.10in} % originale {0pt}{0.20in}{0.02in}
+      \titlespacing*{\subsection}{0pt}{0.10in}{0.05in} % originale {0pt}{0.10in}{0.02in}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%
+%
+%----------------------|
+%                      |
+%       SOMMARIO       |
+%                      |
+%----------------------|
+%
+%%%
+    \input{Doc/Chapter1}
+    \newpage
+    \input{Doc/Chapter2}    
+    \newpage
+    \input{Doc/Chapter3}  
+    \newpage
+    \input{Doc/Chapter4}
+    \newpage
+    \input{Doc/Chapter5}
+    \newpage
+    \input{Doc/Chapter6}
+    \endgroup
+    \afterpage{\null\newpage}
+%----------------------------------------------------------------------------------| 
+%%%
+%
+%----------------------|
+%                      |
+%        BIBLIO        |
+%                      |
+%----------------------|
+%
+%%%
+    %\clearpage
+    \begin{flushleft}
+    % bibliografia in formato bibtex
+    %
+    % aggiunta del capitolo nell'indice
+    \addcontentsline{toc}{chapter}{Bibliography}
+    % stile con ordinamento alfabetico in funzione degli autori
+    \bibliographystyle{plain}
+    \bibliography{biblio}
+    \end{flushleft}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Nella bibliografia devono essere riportati tutte le fonti consultate 
+%% per lo svolgimento della tesi. La bibliografia deve essere redatta 
+%% in ordine alfabetico sul cognome del primo autore. 
+%% 
+%% La forma della citazione bibliografica va inserita secondo la fonte utilizzata:
+%% 
+%% LIBRI
+%% Cognome e iniziale del nome autore/autori, la data di edizione, titolo, casa editrice, eventuale numero dell’edizione. 
+%% 
+%% ARTICOLI DI RIVISTA
+%% Cognome e iniziale del nome autore/autori, titolo articolo, titolo rivista, volume, numero, numero di pagine.
+%% 
+%% ARTICOLI DI CONFERENZA
+%% Cognome e iniziale del nome autore/autori (anno), titolo articolo, titolo conferenza, luogo della conferenza (città e paese), date della conferenza, numero di pagine. 
+%% 
+%% SITOGRAFIA
+%% La sitografia contiene un elenco di indirizzi Web consultati e disposti in ordine alfabetico. 
+%% E’ necessario:
+%%   Copiare la URL (l’indirizzo web) specifica della pagina consultata
+%%   Se disponibile, indicare il cognome e nome dell’autore, il titolo ed eventuale sottotitolo del testo
+%%   Se disponibile, inserire la data di ultima consultazione della risorsa (gg/mm/aaaa).    
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% 
+%%%
+%
+%-------------------------|
+%                         |
+%        APPENDICE        |
+%                         |
+%-------------------------|
+%
+%%%
+    % \titleformat{\chapter}
+    %     {\normalfont\Huge\bfseries}{Allegato \thechapter}{1em}{}
+    % % sezione Allegati - opzionale
+    % \appendix
+    % \input{Doc/allegati}
+% -----------------------------------------------------------------------------------------|
+\end{document}

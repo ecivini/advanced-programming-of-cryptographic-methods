@@ -32,3 +32,15 @@ go.work.sum
 revokation.txt
 challenge*.txt
 signature.txt
+
+# Latex files
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.bib
+*.gz
+*.fdb_latexmk
+*.fls
