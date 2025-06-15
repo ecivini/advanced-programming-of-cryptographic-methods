@@ -69,10 +69,19 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	return commitment.Challenge
 }
 
-func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey, serial *big.Int) ([]byte, error) {
-	// Create client certificate template
-	now := time.Now()
-	oneYearFromNow := now.Add(time.Hour * 24 * 365)
+func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey, serial *big.Int, validFrom, validUntil *time.Time) ([]byte, error) {
+	isRenewing := validFrom != nil && validUntil != nil
+
+	var certValidFrom time.Time
+	var certValidUntil time.Time
+	if !isRenewing {
+		// If no expiry date is provided, set it to one year from now
+		certValidFrom = time.Now()
+		certValidUntil = certValidFrom.Add(time.Hour * 24 * 365)
+	} else {
+		certValidFrom = *validFrom
+		certValidUntil = *validUntil
+	}
 
 	clientCertTemplate := &x509.Certificate{
 		SerialNumber: serial,
@@ -80,8 +89,8 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 			CommonName: email,
 		},
 		EmailAddresses:        []string{email},
-		NotBefore:             now,
-		NotAfter:              oneYearFromNow,
+		NotBefore:             certValidFrom,
+		NotAfter:              certValidUntil,
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageEmailProtection},
 		BasicConstraintsValid: true,
@@ -125,16 +134,18 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 	pemData := pem.EncodeToMemory(pemBlock)
 
 	// Store certificate data
-	certData := db.CertificateData{
-		ID:           bson.NewObjectID(),
-		SerialNumber: serial.String(),
-		ValidFrom:    bson.NewDateTimeFromTime(now),
-		ValidUntil:   bson.NewDateTimeFromTime(oneYearFromNow),
-		Revoked:      false,
-	}
-	err = db.StoreCertificateData(repo.db, certData)
-	if err != nil {
-		return nil, err
+	if !isRenewing {
+		certData := db.CertificateData{
+			ID:           bson.NewObjectID(),
+			SerialNumber: serial.String(),
+			ValidFrom:    bson.NewDateTimeFromTime(certValidFrom),
+			ValidUntil:   bson.NewDateTimeFromTime(certValidUntil),
+			Revoked:      false,
+		}
+		err = db.StoreCertificateData(repo.db, certData)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return pemData, nil
@@ -162,6 +173,17 @@ func (repo *CertificateRepository) GetCommitmentFromReservedSerialNumber(serial 
 	return commitment
 }
 
+func (repo *CertificateRepository) GetCertificateDataFromSerialNumber(serial string) *db.CertificateData {
+	data, err := db.RetrieveCertificateDataFromSerial(repo.db, serial)
+
+	if err != nil {
+		fmt.Println("[-] Unable to retrieve identity commitment: ", err)
+		return nil
+	}
+
+	return data
+}
+
 func (repo *CertificateRepository) GetStatusFromSerialNumber(serial string) *db.CertificateData {
 	certificateData, err := db.RetrieveCertificateData(repo.db, serial)
 	if err != nil {
@@ -187,7 +209,7 @@ func (repo *CertificateRepository) VerifyChallenge(challenge, response, publicKe
 }
 
 // RevokeCertificateByID revokes a certificate by its serial number
-func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) error {
+func (repo *CertificateRepository) RevokeCertificate(serialNumber string) error {
 	// Update the certificate status in the database
 	err := db.RevokeCertificate(repo.db, serialNumber)
 	if err != nil {
@@ -195,6 +217,17 @@ func (repo *CertificateRepository) RevokeCertificateByID(serialNumber string) er
 	}
 
 	log.Printf("[+] Certificate with serial number %s has been revoked", serialNumber)
+	return nil
+}
+
+func (repo *CertificateRepository) RenewCertificate(serialNumber string, newExpiryDate time.Time) error {
+	// Update the certificate status in the database
+	err := db.RenewCertificate(repo.db, serialNumber, newExpiryDate)
+	if err != nil {
+		return fmt.Errorf("failed to renew certificate with serial %s: %w", serialNumber, err)
+	}
+
+	log.Printf("[+] Certificate with serial number %s has been renewd for one year", serialNumber)
 	return nil
 }
 

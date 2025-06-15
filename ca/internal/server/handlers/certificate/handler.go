@@ -138,7 +138,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	//Generate certificate
 	serialNumber := new(big.Int)
 	serialNumber, _ = serialNumber.SetString(committedIdentity.ReservedSerialNumber, 10)
-	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, serialNumber)
+	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, serialNumber, nil, nil)
 	if err != nil {
 		fmt.Println("[-] Unable to create certificate: ", err)
 		handlers.ReturnErroredResponse("Failed to generate certificate", &w, http.StatusInternalServerError)
@@ -186,7 +186,7 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	//Revoke certificate
-	if err := h.repo.RevokeCertificateByID(requestBody.SerialNumber); err != nil {
+	if err := h.repo.RevokeCertificate(requestBody.SerialNumber); err != nil {
 		handlers.ReturnErroredResponse("Failed to revoke certificate", &w, http.StatusInternalServerError)
 		return
 	}
@@ -194,6 +194,83 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	//Response
 	response := map[string]string{
 		"message": "Certificate revoked successfully",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *http.Request) {
+	var requestBody struct {
+		Signature string `json:"signature"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		handlers.ReturnErroredResponse("Invalid request payload", &w, http.StatusBadRequest)
+		return
+	}
+
+	signature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
+	if err != nil {
+		handlers.ReturnErroredResponse("Unable to parse signature", &w, http.StatusBadRequest)
+		return
+	}
+
+	// Retrieve identity commitment based on the serial number
+	serialNumber := r.PathValue("serial")
+	certData := h.repo.GetCertificateDataFromSerialNumber(serialNumber)
+	committedIdentity := h.repo.GetCommitmentFromReservedSerialNumber(serialNumber)
+	if committedIdentity == nil || certData == nil {
+		handlers.ReturnErroredResponse("Invalid serial number", &w, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the certificate is revoked
+	if certData.Revoked {
+		handlers.ReturnErroredResponse("Certificate is revoked", &w, http.StatusBadRequest)
+		return
+	}
+	// Check if the certificate is still valid
+	now := time.Now()
+	if certData.ValidUntil.Time().Before(now) {
+		handlers.ReturnErroredResponse("Certificate has expired", &w, http.StatusBadRequest)
+		return
+	}
+
+	// Verify signature
+	// Expected message is "Revoke: <serial number>"
+	message := []byte("Renew: " + serialNumber)
+	signatureValid := h.repo.verifySignature(message, signature, committedIdentity.PublicKeyDER)
+	if !signatureValid {
+		handlers.ReturnErroredResponse("Invalid signature", &w, http.StatusBadRequest)
+		return
+	}
+
+	// Update certificate data in DB
+	newExpiryDate := certData.ValidUntil.Time().Add(time.Hour * 24 * 365) // Renew for one year
+	if err := h.repo.RenewCertificate(serialNumber, newExpiryDate); err != nil {
+		handlers.ReturnErroredResponse("Failed to revoke certificate", &w, http.StatusInternalServerError)
+		return
+	}
+
+	// Generate new certificate
+	serialAsBigInt, _ := new(big.Int).SetString(serialNumber, 10)
+	validFrom := certData.ValidFrom.Time()
+	certificate, err := h.repo.CreateCertificate(
+		committedIdentity.Email,
+		h.repo.ValidatePublicKey(committedIdentity.PublicKeyDER),
+		serialAsBigInt,
+		&validFrom,
+		&newExpiryDate,
+	)
+	if err != nil {
+		fmt.Println("[-] Unable to renew certificate: ", err)
+		handlers.ReturnErroredResponse("Failed to renew certificate", &w, http.StatusInternalServerError)
+		return
+	}
+
+	//Response
+	response := map[string]string{
+		"message":     "Certificate renew successfully",
+		"certificate": string(certificate),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)

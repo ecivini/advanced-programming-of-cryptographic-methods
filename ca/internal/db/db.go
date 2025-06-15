@@ -44,6 +44,20 @@ func RetrieveIdentityCommittmentFromReservedSerial(client *mongo.Client, serial 
 	return &result, nil
 }
 
+func RetrieveCertificateDataFromSerial(client *mongo.Client, serial string) (*CertificateData, error) {
+	collection := client.Database("ca").Collection("certificates_data")
+	filter := bson.M{"serial_number": serial}
+
+	var result CertificateData
+	err := collection.FindOne(context.Background(), filter, nil).Decode(&result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
 func StoreCertificateData(client *mongo.Client, certData CertificateData) error {
 	collection := client.Database("ca").Collection("certificates_data")
 	_, err := collection.InsertOne(context.Background(), certData)
@@ -70,6 +84,23 @@ func RevokeCertificate(client *mongo.Client, serial string) error {
 
 	filter := bson.M{"serial_number": serial}
 	update := bson.M{"$set": bson.M{"revoked": true, "revocation_date": bson.NewDateTimeFromTime(time.Now())}}
+
+	result, err := collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
+}
+
+func RenewCertificate(client *mongo.Client, serial string, newExpiryDate time.Time) error {
+	collection := client.Database("ca").Collection("certificates_data")
+
+	filter := bson.M{"serial_number": serial}
+	update := bson.M{"$set": bson.M{"valid_until": bson.NewDateTimeFromTime(newExpiryDate)}}
 
 	result, err := collection.UpdateOne(context.Background(), filter, update)
 	if err != nil {
