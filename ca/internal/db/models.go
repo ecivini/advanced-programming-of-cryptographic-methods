@@ -5,7 +5,7 @@ import (
 )
 
 type IdentityCommitment struct {
-	ID                   bson.ObjectID `bson:"_id,nonempty,unique"`
+	ID                   bson.ObjectID `bson:"_id,unique"`
 	Challenge            string        `bson:"challenge,nonempty"`
 	Email                string        `bson:"email,nonempty"`
 	PublicKeyDER         []byte        `bson:"public_key_der,nonempty"`
@@ -17,7 +17,7 @@ type IdentityCommitment struct {
 }
 
 type CertificateData struct {
-	ID             bson.ObjectID `bson:"_id,unique,nonempty"`
+	ID             bson.ObjectID `bson:"_id,unique"`
 	SerialNumber   string        `bson:"serial_number,nonempty"`
 	ValidFrom      bson.DateTime `bson:"valid_from,nonempty"`
 	ValidUntil     bson.DateTime `bson:"valid_until,nonempty"`

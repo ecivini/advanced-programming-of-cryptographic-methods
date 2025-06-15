@@ -126,6 +126,7 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 
 	// Store certificate data
 	certData := db.CertificateData{
+		ID:           bson.NewObjectID(),
 		SerialNumber: serial.String(),
 		ValidFrom:    bson.NewDateTimeFromTime(now),
 		ValidUntil:   bson.NewDateTimeFromTime(oneYearFromNow),
