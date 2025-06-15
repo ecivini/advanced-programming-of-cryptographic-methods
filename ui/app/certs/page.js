@@ -217,6 +217,7 @@ export default function CertsPage() {
   const [privateKey, setPrivateKey] = useState('');
   const [isRevoking, setIsRevoking] = useState(false);
   const [revocationSuccess, setRevocationSuccess] = useState(false);
+  const [revocationMessage, setRevocationMessage] = useState('');
 
   // Handle file upload for certificate
   const handleFileUpload = (event) => {
@@ -276,6 +277,8 @@ export default function CertsPage() {
       };
 
       setCertificateInfo(info);
+      
+      // Do not auto-populate revocation message - let user enter it manually
     } catch (err) {
       setError(`Failed to parse certificate: ${err.message}`);
     } finally {
@@ -297,18 +300,18 @@ export default function CertsPage() {
     }
   };
 
-  // Format serial number for display (first 3 and last 3 digits with ellipsis)
+  // Format serial number for display (first 5 and last 5 digits with ellipsis)
   const formatSerialNumber = (serialNumber) => {
-    if (!serialNumber || serialNumber.length <= 6) {
+    if (!serialNumber || serialNumber.length <= 10) {
       return serialNumber;
     }
-    return `${serialNumber.slice(0, 3)}...${serialNumber.slice(-3)}`;
+    return `${serialNumber.slice(0, 5)}...${serialNumber.slice(-5)}`;
   };
 
   // Revoke certificate
   const revokeCertificate = async () => {
-    if (!certificateInfo || !certificateInfo.serialNumber || !privateKey.trim()) {
-      setError('Please provide both a valid certificate and your private key');
+    if (!certificateInfo || !certificateInfo.serialNumber || !privateKey.trim() || !revocationMessage.trim()) {
+      setError('Please provide a valid certificate, your private key, and a revocation message');
       return;
     }
 
@@ -317,9 +320,6 @@ export default function CertsPage() {
     setRevocationSuccess(false);
 
     try {
-      // Create the revocation message
-      const revocationMessage = `Revoke: ${certificateInfo.serialNumber}`;
-      
       // Sign the revocation message
       const signature = await signMessage(privateKey, revocationMessage);
 
@@ -356,7 +356,7 @@ export default function CertsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-4xl mx-auto space-y-8">
       <div className="text-center mb-8">
         <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl mb-4">
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -546,106 +546,154 @@ export default function CertsPage() {
                   </div>
                 </div>
               </div>
-
-              {/* Revocation Section */}
-              {certificateInfo.isValid && certificateInfo.serialNumber && !revocationSuccess && (
-                <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
-                  <h3 className="text-sm font-medium text-red-800 mb-3 flex items-center">
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                    Revoke Certificate
-                  </h3>
-                  <p className="text-sm text-red-700 mb-4">
-                    To revoke this certificate, you need to sign the revocation message with your private key.
-                    Message to sign: <code className="bg-red-100 px-1 rounded">Revoke: {certificateInfo.serialNumber}</code>
-                  </p>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-red-800 mb-2">Private Key (PEM format)</label>
-                      <div className="flex gap-2 mb-2">
-                        <input
-                          type="file"
-                          accept=".pem,.key,.txt"
-                          onChange={handlePrivateKeyUpload}
-                          className="hidden"
-                          id="privateKeyFileInput"
-                          disabled={isRevoking}
-                        />
-                        <label
-                          htmlFor="privateKeyFileInput"
-                          className={`btn btn-secondary text-sm cursor-pointer ${isRevoking ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                          </svg>
-                          Upload Key
-                        </label>
-                        <span className="text-xs text-red-600 self-center">or paste below</span>
-                      </div>
-                      <textarea
-                        rows={4}
-                        className="input font-mono resize-none text-sm"
-                        placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-                        value={privateKey}
-                        onChange={(e) => setPrivateKey(e.target.value)}
-                        disabled={isRevoking}
-                      />
-                    </div>
-                    
-                    <button
-                      onClick={revokeCertificate}
-                      disabled={isRevoking || !privateKey.trim()}
-                      className={`btn btn-danger w-full ${
-                        isRevoking || !privateKey.trim() ? 'opacity-50 cursor-not-allowed' : ''
-                      }`}
-                    >
-                      {isRevoking ? (
-                        <>
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          Revoking Certificate...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Revoke Certificate
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Success message for revocation */}
-              {revocationSuccess && (
-                <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                  <div className="flex items-center">
-                    <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="text-green-800 font-medium">Certificate has been successfully revoked</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
-                <div className="flex items-start">
-                  <svg className="w-5 h-5 text-amber-500 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <h3 className="text-sm font-medium text-amber-800 mb-1">Note</h3>
-                    <p className="text-sm text-amber-700">This is a basic certificate format validator with serial number extraction. For detailed certificate analysis including subject, issuer, validity dates, and extensions, a full ASN.1/X.509 parser would be required.</p>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Certificate Revocation Section */}
+      {certificateInfo && certificateInfo.isValid && certificateInfo.serialNumber && !revocationSuccess && (
+        <div className="card p-6">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-10 h-10 bg-gradient-to-r from-red-500 to-red-600 rounded-2xl mb-4">
+              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Revoke Certificate</h2>
+            <p className="text-slate-600">Sign a message to revoke this certificate from the Certificate Authority</p>
+          </div>
+
+          <div className="max-w-2xl mx-auto space-y-6">
+            <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-sm text-red-700 mb-2">
+                    <strong>Quick Revocation Helper</strong>
+                  </p>
+                  <p className="text-sm text-red-700 mb-3">
+                    To revoke this certificate click the button to auto-populate the message field.
+                    You can then sign the message with your private key."
+                  </p>
+                </div>
+                <button
+                  onClick={() => setRevocationMessage(`Revoke:${certificateInfo.serialNumber}`)}
+                  className="btn btn-secondary text-xs ml-4 flex-shrink-0"
+                  title="Auto-populate revocation message"
+                >
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Auto-fill Message
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Message to Sign</label>
+              <textarea
+                rows={3}
+                className="input font-mono resize-none"
+                placeholder="Revoke:"
+                value={revocationMessage}
+                onChange={(e) => setRevocationMessage(e.target.value)}
+                disabled={isRevoking}
+              />
+              <p className="text-sm text-slate-500 mt-2">
+                Enter the message to sign. Format: "Revoke:&lt;serial_number&gt;" (copy the serial number from above)
+              </p>
+            </div>
+
+            <div>
+              <label className="label">Private Key (PEM format)</label>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    accept=".pem,.key,.txt"
+                    onChange={handlePrivateKeyUpload}
+                    className="hidden"
+                    id="privateKeyFileInput"
+                    disabled={isRevoking}
+                  />
+                  <label
+                    htmlFor="privateKeyFileInput"
+                    className={`btn btn-secondary cursor-pointer ${isRevoking ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                    Upload Private Key
+                  </label>
+                  <span className="text-sm text-slate-500 self-center">or paste below</span>
+                </div>
+                <textarea
+                  rows={6}
+                  className="input font-mono resize-none"
+                  placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                  value={privateKey}
+                  onChange={(e) => setPrivateKey(e.target.value)}
+                  disabled={isRevoking}
+                />
+              </div>
+              <p className="text-sm text-slate-500 mt-2">
+                Your private key (PKCS#8, PKCS#1, or SEC1 format). Supports RSA and ECDSA keys.
+              </p>
+            </div>
+            
+            <button
+              onClick={revokeCertificate}
+              disabled={isRevoking || !privateKey.trim() || !revocationMessage.trim()}
+              className={`btn btn-danger w-full ${
+                isRevoking || !privateKey.trim() || !revocationMessage.trim() ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+            >
+              {isRevoking ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Revoking Certificate...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Sign Message & Revoke Certificate
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Success message for revocation */}
+      {revocationSuccess && (
+        <div className="card p-6">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-2xl mb-4">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Certificate Revoked Successfully</h2>
+            <p className="text-slate-600">The certificate has been revoked and added to the Certificate Revocation List (CRL)</p>
+            <div className="mt-6">
+              <button
+                onClick={() => {
+                  setRevocationSuccess(false);
+                  setCertificateInfo(null);
+                  setCertificatePEM('');
+                  setPrivateKey('');
+                  setRevocationMessage('');
+                }}
+                className="btn btn-primary"
+              >
+                Revoke Another Certificate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
