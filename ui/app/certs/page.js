@@ -243,6 +243,34 @@ export default function CertsPage() {
     }
   };
 
+  // Check if certificate is revoked by querying certificate status
+  const checkRevocationStatus = async (serialNumber) => {
+    try {
+      // Query certificate status API to check if certificate is revoked
+      const certURL = `${process.env.NEXT_PUBLIC_CA_URL}/v1/certificate/${serialNumber}/status`;
+      const res = await fetch(certURL);
+      
+      if (!res.ok) {
+        // If certificate not found or other error, assume it's active (not revoked)
+        console.warn('Cannot check certificate status:', res.status);
+        return { isRevoked: false, revocationDate: null, error: null };
+      }
+      
+      const statusData = await res.json();
+      
+      // Check if the certificate has revocation flag set
+      return { 
+        isRevoked: statusData.revoked || false, 
+        revocationDate: statusData.revocation_date || null,
+        error: null 
+      };
+    } catch (error) {
+      // If there's an error, assume certificate is active (not revoked)
+      console.warn('Error checking certificate status:', error);
+      return { isRevoked: false, revocationDate: null, error: null };
+    }
+  };
+
   // Parse certificate information
   const parseCertificate = async () => {
     if (!certificatePEM.trim()) {
@@ -263,6 +291,17 @@ export default function CertsPage() {
         .replace(/\s/g, '');
 
       const serialNumber = parseSerialNumber(certificatePEM);
+      
+      // Check if certificate format is valid
+      const hasValidFormat = certificatePEM.includes('-----BEGIN CERTIFICATE-----') && 
+                           certificatePEM.includes('-----END CERTIFICATE-----');
+
+      let revocationStatus = { isRevoked: false, revocationDate: null, error: null };
+      
+      // Only check revocation status if we have a serial number and valid format
+      if (serialNumber && hasValidFormat) {
+        revocationStatus = await checkRevocationStatus(serialNumber);
+      }
 
       const info = {
         format: 'X.509',
@@ -271,9 +310,12 @@ export default function CertsPage() {
         lines: lines.length,
         hasBeginMarker: certificatePEM.includes('-----BEGIN CERTIFICATE-----'),
         hasEndMarker: certificatePEM.includes('-----END CERTIFICATE-----'),
-        isValid: certificatePEM.includes('-----BEGIN CERTIFICATE-----') && 
-                certificatePEM.includes('-----END CERTIFICATE-----'),
-        serialNumber: serialNumber
+        hasValidFormat: hasValidFormat,
+        serialNumber: serialNumber,
+        isRevoked: revocationStatus.isRevoked,
+        revocationDate: revocationStatus.revocationDate,
+        // Certificate is valid if it has correct format AND is not revoked
+        isValid: hasValidFormat && !revocationStatus.isRevoked
       };
 
       setCertificateInfo(info);
@@ -480,18 +522,28 @@ export default function CertsPage() {
                 <div className="bg-slate-50 p-3 rounded-lg">
                   <label className="text-sm font-medium text-slate-600">Status</label>
                   <div className="flex items-center">
-                    {certificateInfo.isValid ? (
-                      <>
-                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
-                        <span className="text-green-700 text-sm font-medium">Valid Format</span>
-                      </>
-                    ) : (
+                    {!certificateInfo.hasValidFormat ? (
                       <>
                         <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
                         <span className="text-red-700 text-sm font-medium">Invalid Format</span>
                       </>
+                    ) : certificateInfo.isRevoked ? (
+                      <>
+                        <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                        <span className="text-red-700 text-sm font-medium">Revoked</span>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                        <span className="text-green-700 text-sm font-medium">Active</span>
+                      </>
                     )}
                   </div>
+                  {certificateInfo.isRevoked && certificateInfo.revocationDate && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Revoked: {new Date(certificateInfo.revocationDate).toLocaleString()}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -552,17 +604,36 @@ export default function CertsPage() {
       </div>
 
       {/* Certificate Revocation Section */}
-      {certificateInfo && certificateInfo.isValid && certificateInfo.serialNumber && !revocationSuccess && (
+      {certificateInfo && certificateInfo.hasValidFormat && certificateInfo.serialNumber && !revocationSuccess && (
         <div className="card p-6">
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-10 h-10 bg-gradient-to-r from-red-500 to-red-600 rounded-2xl mb-4">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
+          {certificateInfo.isRevoked ? (
+            // Certificate is already revoked - show info message
+            <div className="text-center py-8">
+              <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-2xl mb-4">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-slate-800 mb-2">Certificate Already Revoked</h2>
+              <p className="text-slate-600 mb-1">This certificate has already been revoked by the Certificate Authority.</p>
+              {certificateInfo.revocationDate && (
+                <p className="text-sm text-slate-500">
+                  Revocation Date: {new Date(certificateInfo.revocationDate).toLocaleString()}
+                </p>
+              )}
             </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Revoke Certificate</h2>
-            <p className="text-slate-600">Sign a message to revoke this certificate from the Certificate Authority</p>
-          </div>
+          ) : (
+            // Show revocation form for active certificates
+            <>
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-10 h-10 bg-gradient-to-r from-red-500 to-red-600 rounded-2xl mb-4">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">Revoke Certificate</h2>
+                <p className="text-slate-600">Sign a message to revoke this certificate from the Certificate Authority</p>
+              </div>
 
           <div className="max-w-2xl mx-auto space-y-6">
             <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
@@ -663,6 +734,8 @@ export default function CertsPage() {
               )}
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
 
