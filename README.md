@@ -64,3 +64,11 @@ $ cat challenge.txt | base64 -d > challenge_raw.bin && openssl dgst -sha256 -sig
 Sign the revokation challenge:
 ```bash
 $  openssl dgst -sha256 -sign priv-key.pem revokation.txt | base64 > signature.txt
+```
+
+## Test renewal: RSA
+
+Sign the renewal challenge:
+```bash
+$  openssl dgst -sha256 -sign priv-key-rsa.pem renew.txt | base64 > signature.txt
+```
