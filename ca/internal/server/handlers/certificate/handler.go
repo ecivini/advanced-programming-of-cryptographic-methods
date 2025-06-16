@@ -155,8 +155,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 
 func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
-		SerialNumber string `json:"serial_number"`
-		Signature    string `json:"signature"`
+		Signature string `json:"signature"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		handlers.ReturnErroredResponse("Invalid request payload", &w, http.StatusBadRequest)
@@ -170,7 +169,8 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	// Retrieve identity commitment based on the serial number
-	commitment := h.repo.GetCommitmentFromReservedSerialNumber(requestBody.SerialNumber)
+	serialNumber := r.PathValue("serial")
+	commitment := h.repo.GetCommitmentFromReservedSerialNumber(serialNumber)
 	if commitment == nil {
 		handlers.ReturnErroredResponse("Invalid serial number", &w, http.StatusBadRequest)
 		return
@@ -178,7 +178,7 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 
 	// Verify signature
 	// Expected message is "Revoke: <serial number>"
-	message := []byte("Revoke: " + requestBody.SerialNumber)
+	message := []byte("Revoke: " + serialNumber)
 	signatureValid := h.repo.verifySignature(message, signature, commitment.PublicKeyDER)
 	if !signatureValid {
 		handlers.ReturnErroredResponse("Invalid signature", &w, http.StatusBadRequest)
@@ -186,7 +186,7 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	}
 
 	//Revoke certificate
-	if err := h.repo.RevokeCertificate(requestBody.SerialNumber); err != nil {
+	if err := h.repo.RevokeCertificate(serialNumber); err != nil {
 		handlers.ReturnErroredResponse("Failed to revoke certificate", &w, http.StatusInternalServerError)
 		return
 	}

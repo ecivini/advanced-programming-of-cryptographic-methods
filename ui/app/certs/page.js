@@ -366,11 +366,10 @@ export default function CertsPage() {
       const signature = await signMessage(privateKey, revocationMessage);
 
       // Send revocation request to CA
-      const response = await fetch(`${CA_URL}/v1/certificate/revoke`, {
+      const response = await fetch(`${CA_URL}/v1/certificate/${certificateInfo.serialNumber}/revoke`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          serial_number: certificateInfo.serialNumber,
           signature: signature
         }),
       });

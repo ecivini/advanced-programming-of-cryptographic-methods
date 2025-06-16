@@ -27,7 +27,7 @@ func InitServer(hsm *hsm.Hsm, db *mongo.Client, emailService *email.EmailService
 	certificateHandler := certificate.BuildCertificateHandler(certificateRepo, emailService)
 	mux.HandleFunc("PUT /v1/identity", certificateHandler.CommitIdentityHandler)
 	mux.HandleFunc("PUT /v1/certificate", certificateHandler.CreateCertificateHandler)
-	mux.HandleFunc("POST /v1/certificate/revoke", certificateHandler.RevokeCertificateHandler)
+	mux.HandleFunc("POST /v1/certificate/{serial}/revoke", certificateHandler.RevokeCertificateHandler)
 	mux.HandleFunc("GET /v1/certificate/{serial}/status", certificateHandler.GetCertificateStatusHandler)
 	mux.HandleFunc("POST /v1/certificate/{serial}/renew", certificateHandler.RenewCertificateHandler)
 	mux.HandleFunc("GET /v1/crl", certificateHandler.GetRevocationListHandler)
