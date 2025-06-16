@@ -96,6 +96,23 @@ func RevokeCertificate(client *mongo.Client, serial string) error {
 	return nil
 }
 
+func StoreIdentityCommitmentChallengeProof(client *mongo.Client, challenge string, proof []byte) error {
+	collection := client.Database("ca").Collection("identity_commitments")
+
+	filter := bson.M{"challenge": challenge}
+	update := bson.M{"$set": bson.M{"proof": proof}}
+
+	result, err := collection.UpdateOne(context.Background(), filter, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+
+	return nil
+}
+
 func RenewCertificate(client *mongo.Client, serial string, newExpiryDate time.Time) error {
 	collection := client.Database("ca").Collection("certificates_data")
 

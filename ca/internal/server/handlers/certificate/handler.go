@@ -120,6 +120,12 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		return
 	}
 
+	// Check if challenge has been used
+	if committedIdentity.Proof != nil {
+		handlers.ReturnErroredResponse("Challenge already used", &w, http.StatusBadRequest)
+		return
+	}
+
 	challenge, _ := base64.StdEncoding.DecodeString(committedIdentity.Challenge)
 
 	publicKey := h.repo.ValidatePublicKey(committedIdentity.PublicKeyDER)
@@ -134,11 +140,13 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		handlers.ReturnErroredResponse("Invalid signature", &w, http.StatusBadRequest)
 		return
 	}
+	// Store signature so that it is passed to CreateCertificate
+	committedIdentity.Proof = signatureBytes
 
 	//Generate certificate
 	serialNumber := new(big.Int)
 	serialNumber, _ = serialNumber.SetString(committedIdentity.ReservedSerialNumber, 10)
-	certificate, err := h.repo.CreateCertificate(committedIdentity.Email, publicKey, serialNumber, nil, nil)
+	certificate, err := h.repo.CreateCertificate(committedIdentity, publicKey, serialNumber, nil, nil)
 	if err != nil {
 		fmt.Println("[-] Unable to create certificate: ", err)
 		handlers.ReturnErroredResponse("Failed to generate certificate", &w, http.StatusInternalServerError)
@@ -255,7 +263,7 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 	serialAsBigInt, _ := new(big.Int).SetString(serialNumber, 10)
 	validFrom := certData.ValidFrom.Time()
 	certificate, err := h.repo.CreateCertificate(
-		committedIdentity.Email,
+		committedIdentity,
 		h.repo.ValidatePublicKey(committedIdentity.PublicKeyDER),
 		serialAsBigInt,
 		&validFrom,

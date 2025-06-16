@@ -12,7 +12,7 @@ type IdentityCommitment struct {
 	KeyType              string        `bson:"key_type,nonempty"`
 	ValidFrom            bson.DateTime `bson:"valid_from,nonempty"`
 	ValidUntil           bson.DateTime `bson:"valid_until,nonempty"`
-	Proof                []byte        `bson:"signature,omitempty"`
+	Proof                []byte        `bson:"proof,omitempty"`
 	ReservedSerialNumber string        `bson:"reserved_serial_number,unique,nonempty"`
 }
 

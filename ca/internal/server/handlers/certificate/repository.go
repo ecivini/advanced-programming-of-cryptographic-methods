@@ -69,7 +69,7 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 	return commitment.Challenge
 }
 
-func (repo *CertificateRepository) CreateCertificate(email string, clientPublicKey crypto.PublicKey, serial *big.Int, validFrom, validUntil *time.Time) ([]byte, error) {
+func (repo *CertificateRepository) CreateCertificate(commitment *db.IdentityCommitment, clientPublicKey crypto.PublicKey, serial *big.Int, validFrom, validUntil *time.Time) ([]byte, error) {
 	isRenewing := validFrom != nil && validUntil != nil
 
 	var certValidFrom time.Time
@@ -86,9 +86,9 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 	clientCertTemplate := &x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
-			CommonName: email,
+			CommonName: commitment.Email,
 		},
-		EmailAddresses:        []string{email},
+		EmailAddresses:        []string{commitment.Email},
 		NotBefore:             certValidFrom,
 		NotAfter:              certValidUntil,
 		KeyUsage:              x509.KeyUsageDigitalSignature,
@@ -146,9 +146,27 @@ func (repo *CertificateRepository) CreateCertificate(email string, clientPublicK
 		if err != nil {
 			return nil, err
 		}
+
+		// Proof has been set in the handler, so it can be used here safely.
+		err = repo.StoreIdentityCommitmentChallengeProof(commitment.Challenge, commitment.Proof)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return pemData, nil
+}
+
+func (repo *CertificateRepository) StoreIdentityCommitmentChallengeProof(challenge string, proof []byte) error {
+	// Store the challenge proof in the database
+	err := db.StoreIdentityCommitmentChallengeProof(repo.db, challenge, proof)
+	if err != nil {
+		fmt.Println("[-] Unable to store identity commitment challenge proof: ", err)
+		return err
+	}
+
+	fmt.Println("[+] Successfully stored identity commitment challenge proof")
+	return nil
 }
 
 func (repo *CertificateRepository) GetCommitmentFromChallenge(challenge string) *db.IdentityCommitment {
