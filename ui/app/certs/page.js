@@ -648,7 +648,7 @@ export default function CertsPage() {
                   </p>
                 </div>
                 <button
-                  onClick={() => setRevocationMessage(`Revoke:${certificateInfo.serialNumber}`)}
+                  onClick={() => setRevocationMessage(`Revoke: ${certificateInfo.serialNumber}`)}
                   className="btn btn-secondary text-xs ml-4 flex-shrink-0"
                   title="Auto-populate revocation message"
                 >
@@ -665,13 +665,13 @@ export default function CertsPage() {
               <textarea
                 rows={3}
                 className="input font-mono resize-none"
-                placeholder="Revoke:"
+                placeholder="Revoke: "
                 value={revocationMessage}
                 onChange={(e) => setRevocationMessage(e.target.value)}
                 disabled={isRevoking}
               />
               <p className="text-sm text-slate-500 mt-2">
-                Enter the message to sign. Format: "Revoke:&lt;serial_number&gt;" (copy the serial number from above)
+                Enter the message to sign. Format: "Revoke: &lt;serial_number&gt;" (copy the serial number from above)
               </p>
             </div>
 
