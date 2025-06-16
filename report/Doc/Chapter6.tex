@@ -1,2 +1,417 @@
 \chapter{Instructions for Installation and Execution}
-ec
+
+This chapter provides comprehensive instructions for installing, configuring, and executing the Certificate Authority system. These instructions are designed to enable readers to successfully deploy and test the system in their own environments.
+
+\section{System Prerequisites}
+
+\subsection{Hardware Requirements}
+
+\textbf{Minimum Requirements:}
+\begin{itemize}
+    \item CPU: 2 cores
+    \item RAM: 4 GB
+    \item Storage: 10 GB free disk space
+    \item Network: Internet connection for Docker image downloads
+\end{itemize}
+
+\textbf{Recommended Requirements:}
+\begin{itemize}
+    \item CPU: 4+ cores
+    \item RAM: 8+ GB
+    \item Storage: 20+ GB free disk space
+    \item Network: Stable broadband internet connection
+\end{itemize}
+
+\subsection{Software Prerequisites}
+
+The following software must be installed on the target system:
+
+\textbf{Required Software:}
+\begin{itemize}
+    \item \textbf{Operating System}: Linux, macOS, or Windows with WSL2
+    \item \textbf{Docker Engine}: Version 20.10 or higher
+    \item \textbf{Docker Compose}: Version 2.0 or higher
+    \item \textbf{Git}: Version 2.30 or higher (for source code retrieval)
+\end{itemize}
+
+\textbf{Optional but Recommended:}
+\begin{itemize}
+    \item \textbf{Make}: For simplified command execution
+    \item \textbf{curl}: For API testing and verification
+    \item \textbf{jq}: For JSON response formatting during testing
+\end{itemize}
+
+\section{Installation Instructions}
+
+\subsection{Docker Installation}
+
+\textbf{For Ubuntu/Debian Linux:}
+\begin{verbatim}
+# Update package index
+sudo apt update
+
+# Install Docker
+sudo apt install -y docker.io docker-compose-plugin
+
+# Add user to docker group
+sudo usermod -aG docker $USER
+
+# Restart shell or logout/login to apply group changes
+newgrp docker
+
+# Verify installation
+docker --version
+docker compose version
+\end{verbatim}
+
+\textbf{For macOS:}
+\begin{enumerate}
+    \item Download Docker Desktop from \texttt{https://docker.com/products/docker-desktop}
+    \item Install the application following the provided installer
+    \item Launch Docker Desktop and ensure it's running
+    \item Verify installation in terminal:
+\end{enumerate}
+\begin{verbatim}
+docker --version
+docker compose version
+\end{verbatim}
+
+\textbf{For Windows:}
+\begin{enumerate}
+    \item Install WSL2 following Microsoft's official documentation
+    \item Download Docker Desktop for Windows
+    \item Install with WSL2 backend enabled
+    \item Verify installation in WSL2 terminal or PowerShell
+\end{enumerate}
+
+\subsection{Source Code Acquisition}
+
+\textbf{Option 1: Git Clone (Recommended)}
+\begin{verbatim}
+# Clone the repository
+git clone [repository-url]
+cd advanced-programming-of-cryptographic-methods
+
+# Verify directory structure
+ls -la
+\end{verbatim}
+
+\textbf{Option 2: Direct Download}
+\begin{enumerate}
+    \item Download the project archive from the provided source
+    \item Extract to desired directory
+    \item Navigate to project root directory
+\end{enumerate}
+
+\section{Configuration Setup}
+
+\subsection{Environment Configuration}
+
+Create a \texttt{.env} file in the project root directory with the following configuration:
+
+\begin{verbatim}
+# MongoDB Configuration
+MONGO_USERNAME=admin
+MONGO_PASSWORD=securepassword123
+
+# AWS/HSM Configuration
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+
+# Email Service Configuration (Resend.com)
+RESEND_API_KEY=your_resend_api_key_here
+RESEND_FROM=noreply@yourdomain.com
+\end{verbatim}
+
+\textbf{Important Configuration Notes:}
+\begin{itemize}
+    \item \textbf{MongoDB Credentials}: Use strong passwords for production deployment
+    \item \textbf{AWS Credentials}: For development, the test values work with local KMS
+    \item \textbf{Email Service}: Sign up at resend.com for API key (required for email verification)
+    \item \textbf{Domain Configuration}: Replace \texttt{yourdomain.com} with your actual domain
+\end{itemize}
+
+\subsection{Email Service Setup}
+
+\textbf{Resend.com Setup (Required for Email Verification):}
+\begin{enumerate}
+    \item Visit \texttt{https://resend.com} and create an account
+    \item Navigate to API Keys section in dashboard
+    \item Create a new API key with appropriate permissions
+    \item Add your domain for email sending verification
+    \item Update \texttt{RESEND\_API\_KEY} and \texttt{RESEND\_FROM} in \texttt{.env} file
+\end{enumerate}
+
+\textbf{Alternative Email Providers:}
+If using different email service, modify the email configuration in:
+\texttt{ca/internal/email/email.go}
+
+\subsection{SSL/TLS Certificates (Development)}
+
+The project includes development certificates in the \texttt{dev-certs/} directory:
+\begin{itemize}
+    \item \texttt{dev-ca.key/dev-ca.pem}: Development CA key pair
+    \item \texttt{mongodb.*}: MongoDB SSL certificates
+    \item \texttt{root.pem}: Root certificate for development
+\end{itemize}
+
+\textbf{For Production:} Replace development certificates with properly issued certificates from a trusted CA.
+
+\section{System Execution}
+
+\subsection{Starting the Complete System}
+
+\textbf{Initial Startup:}
+\begin{verbatim}
+# Navigate to project directory
+cd advanced-programming-of-cryptographic-methods
+
+# Build and start all services
+docker compose up --build
+
+# Alternative: Run in background
+docker compose up --build -d
+\end{verbatim}
+
+\textbf{Expected Output:}
+The system will start the following services:
+\begin{itemize}
+    \item \textbf{MongoDB}: Database service on port 27017
+    \item \textbf{Local KMS}: HSM simulation service on port 8080
+    \item \textbf{Backend}: CA server on port 5000
+    \item \textbf{Frontend}: Web interface on port 3000
+\end{itemize}
+
+\subsection{Service Verification}
+
+\textbf{Check Service Status:}
+\begin{verbatim}
+# View running containers
+docker compose ps
+
+# View service logs
+docker compose logs backend
+docker compose logs frontend
+docker compose logs mongo
+docker compose logs local-kms
+\end{verbatim}
+
+\textbf{Health Check Endpoints:}
+\begin{verbatim}
+# Backend health check
+curl http://localhost:5000/v1/health
+
+# Frontend accessibility
+curl http://localhost:3000
+
+# KMS service check
+curl http://localhost:8080
+\end{verbatim}
+
+\subsection{First-Time Setup}
+
+During the initial startup, the system automatically:
+\begin{enumerate}
+    \item Creates a new root key pair in the HSM
+    \item Generates the root certificate for the CA
+    \item Initializes the database schema
+    \item Sets up necessary indexes
+\end{enumerate}
+
+\textbf{To Reset the System:}
+\begin{verbatim}
+# Stop all services
+docker compose down
+
+# Remove HSM data for clean restart
+docker container rm local-kms
+
+# Remove database data (optional)
+docker volume rm advanced-programming-of-cryptographic-methods_mongo-data
+
+# Restart system
+docker compose up --build
+\end{verbatim}
+
+\section{System Access and Usage}
+
+\subsection{Web Interface Access}
+
+\textbf{Primary Interface:}
+\begin{itemize}
+    \item URL: \texttt{http://localhost:3000}
+    \item Description: Main web interface for certificate management
+\end{itemize}
+
+\textbf{Available Pages:}
+\begin{itemize}
+    \item \textbf{Home}: \texttt{http://localhost:3000} - System overview and navigation
+    \item \textbf{Certificate Signing}: \texttt{http://localhost:3000/sign} - Request new certificates
+    \item \textbf{Certificate Viewer}: \texttt{http://localhost:3000/certs} - View and revoke certificates
+    \item \textbf{CRL Viewer}: \texttt{http://localhost:3000/crl} - View revoked certificates
+    \item \textbf{Certificate Commitment}: \texttt{http://localhost:3000/commit} - Validate certificates
+\end{itemize}
+
+\subsection{API Access}
+
+\textbf{Base URL:} \texttt{http://localhost:5000}
+
+\textbf{Key Endpoints:}
+\begin{itemize}
+    \item \texttt{GET /v1/health} - System health status
+    \item \texttt{GET /v1/info} - CA information and public key
+    \item \texttt{POST /v1/certificate/sign} - Certificate signing requests
+    \item \texttt{POST /v1/certificate/revoke} - Certificate revocation
+    \item \texttt{GET /v1/crl} - Certificate revocation list
+\end{itemize}
+
+\textbf{Example API Usage:}
+\begin{verbatim}
+# Get CA information
+curl http://localhost:5000/v1/info
+
+# Check system health
+curl http://localhost:5000/v1/health
+
+# Get CRL
+curl http://localhost:5000/v1/crl
+\end{verbatim}
+
+\section{Testing and Validation}
+
+\subsection{Basic Functionality Testing}
+
+\textbf{Test Certificate Workflow:}
+\begin{enumerate}
+    \item Access web interface at \texttt{http://localhost:3000}
+    \item Navigate to \texttt{/sign} page
+    \item Generate a new key pair using the interface
+    \item Enter a valid email address for verification
+    \item Submit the certificate signing request
+    \item Check email for verification link and complete verification
+    \item Verify certificate appears in the system
+\end{enumerate}
+
+\textbf{Test Certificate Revocation:}
+\begin{enumerate}
+    \item Navigate to \texttt{/certs} page
+    \item Upload or paste a certificate for viewing
+    \item Use the revocation interface to revoke the certificate
+    \item Verify the certificate appears in the CRL at \texttt{/crl}
+\end{enumerate}
+
+\subsection{API Testing}
+
+\textbf{Health Check Test:}
+\begin{verbatim}
+curl -X GET http://localhost:5000/v1/health
+# Expected: {"status":"healthy"}
+\end{verbatim}
+
+\textbf{CA Information Test:}
+\begin{verbatim}
+curl -X GET http://localhost:5000/v1/info
+# Expected: JSON with CA certificate and public key
+\end{verbatim}
+
+\section{Troubleshooting}
+
+\subsection{Common Issues and Solutions}
+
+\textbf{Port Conflicts:}
+\begin{itemize}
+    \item \textbf{Issue}: Ports 3000, 5000, 8080, or 27017 already in use
+    \item \textbf{Solution}: Modify port mappings in \texttt{docker-compose.yml}
+    \item \textbf{Example}: Change \texttt{"3000:3000"} to \texttt{"3001:3000"}
+\end{itemize}
+
+\textbf{Email Service Issues:}
+\begin{itemize}
+    \item \textbf{Issue}: Email verification not working
+    \item \textbf{Solution}: Verify \texttt{RESEND\_API\_KEY} is correct and domain is verified
+    \item \textbf{Alternative}: Check email service logs: \texttt{docker compose logs backend}
+\end{itemize}
+
+\textbf{Database Connection Issues:}
+\begin{itemize}
+    \item \textbf{Issue}: Backend cannot connect to MongoDB
+    \item \textbf{Solution}: Verify MongoDB container is running and credentials are correct
+    \item \textbf{Check}: \texttt{docker compose logs mongo}
+\end{itemize}
+
+\textbf{HSM Service Issues:}
+\begin{itemize}
+    \item \textbf{Issue}: Backend cannot connect to HSM
+    \item \textbf{Solution}: Verify local-kms container is running
+    \item \textbf{Reset}: Remove HSM container and restart
+\end{itemize}
+
+\subsection{Log Analysis}
+
+\textbf{Viewing Detailed Logs:}
+\begin{verbatim}
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f backend
+
+# With timestamps
+docker compose logs -t backend
+\end{verbatim}
+
+\textbf{Debug Mode:}
+For additional debugging, set environment variables:
+\begin{verbatim}
+# In .env file
+DEBUG=true
+LOG_LEVEL=debug
+\end{verbatim}
+
+\section{Production Deployment Considerations}
+
+\subsection{Security Hardening}
+
+\textbf{For Production Use:}
+\begin{itemize}
+    \item Replace development certificates with production certificates
+    \item Use real AWS KMS instead of local KMS simulation
+    \item Configure proper firewall rules and access controls
+    \item Enable SSL/TLS for all communications
+    \item Implement proper backup and disaster recovery procedures
+    \item Set up monitoring and alerting systems
+\end{itemize}
+
+\subsection{Performance Optimization}
+
+\textbf{Recommended Optimizations:}
+\begin{itemize}
+    \item Configure MongoDB replica sets for high availability
+    \item Implement load balancing for multiple backend instances
+    \item Set up CDN for frontend asset delivery
+    \item Configure caching layers for improved performance
+    \item Implement database indexing for query optimization
+\end{itemize}
+
+\section{Support and Additional Resources}
+
+\subsection{Documentation References}
+
+\begin{itemize}
+    \item \textbf{Docker Documentation}: \texttt{https://docs.docker.com}
+    \item \textbf{MongoDB Documentation}: \texttt{https://docs.mongodb.com}
+    \item \textbf{AWS KMS Documentation}: \texttt{https://docs.aws.amazon.com/kms}
+    \item \textbf{Go Documentation}: \texttt{https://golang.org/doc}
+    \item \textbf{Next.js Documentation}: \texttt{https://nextjs.org/docs}
+\end{itemize}
+
+\subsection{Contact Information}
+
+For technical support or questions regarding this implementation:
+\begin{itemize}
+    \item \textbf{Emanuele Civini}: emanuele.civini@studenti.unitn.it
+    \item \textbf{Alessia Pivotto}: alessia.pivotto@studenti.unitn.it
+\end{itemize}
+
+This comprehensive guide provides all necessary information to successfully install, configure, and execute the Certificate Authority system. Following these instructions should result in a fully functional PKI implementation suitable for development, testing, and educational purposes.

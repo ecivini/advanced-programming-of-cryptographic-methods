@@ -1,7 +1,117 @@
 \chapter{Requirements}
-sajhca
+
+This chapter defines the comprehensive set of requirements that guide the design and implementation of our Certificate Authority system. The requirements are categorized into functional requirements, which specify what the system must do, and security requirements, which define how the system must protect itself and its users from various threats and vulnerabilities.
+
 \section{Functional Requirements}
-sdcjbq
+
+The functional requirements define the core capabilities and operations that the Certificate Authority must provide to fulfill its role in a Public Key Infrastructure. Each requirement is justified based on standard PKI practices and the specific needs of secure certificate management.
+
+\subsection{FR1: Certificate Issuance}
+
+\textbf{Requirement:} The CA must generate and issue digital certificates after verifying the identity of the certificate requester.
+
+\textbf{Justification:} Certificate issuance is the primary function of any Certificate Authority. This process involves receiving Certificate Signing Requests (CSRs) from entities, validating the authenticity of the request, and creating signed digital certificates that bind public keys to verified identities. Without this capability, the CA cannot fulfill its fundamental role as a trusted third party in the PKI ecosystem. The verification step is crucial to prevent unauthorized certificate issuance, which could compromise the entire trust infrastructure.
+
+\textbf{Implementation Details:} The system must support standard CSR formats, perform comprehensive validation of request parameters, and generate certificates compliant with X.509 standards.
+
+\subsection{FR2: Certificate Revocation}
+
+\textbf{Requirement:} Users can request the revocation of any of their certificates at any moment, for example when they suspect a private key leakage.
+
+\textbf{Justification:} Certificate revocation is essential for maintaining the integrity of the PKI when certificates become compromised, are no longer needed, or when the associated private keys are suspected to be leaked. Without a revocation mechanism, compromised certificates would remain valid until their natural expiration, potentially allowing unauthorized access to resources. The ability for certificate holders to initiate revocation ensures that they maintain control over their digital identities and can respond quickly to security incidents.
+
+\textbf{Implementation Details:} The system must provide authenticated revocation requests, requiring proof of private key ownership to prevent malicious revocation attacks by unauthorized parties.
+
+\subsection{FR3: Certificate Revocation List (CRL) Accessibility}
+
+\textbf{Requirement:} The CA must maintain a Certificate Revocation List to track revoked certificates. Anyone must be able to check the status of any certificate by querying the CRL to verify whether a specific certificate has been revoked or not.
+
+\textbf{Justification:} The CRL serves as the authoritative source for certificate revocation status information. Public accessibility is crucial because certificate validation is performed by various parties across the network, not just by the certificate holders themselves. Without a publicly accessible CRL, relying parties would have no way to determine if a certificate has been revoked, potentially accepting invalid certificates and compromising security. This requirement aligns with RFC 5280 standards for certificate validation.
+
+\textbf{Implementation Details:} The CRL must be regularly updated, digitally signed by the CA, and made available through standard protocols such as HTTP or LDAP.
+
+\subsection{FR4: Identity Verification}
+
+\textbf{Requirement:} The CA must implement processes to verify the authenticity of the certificate applicant's email and the ownership of the proper private key. This process simplifies the identity verification typically required by real-world CAs.
+
+\textbf{Justification:} Identity verification is fundamental to establishing trust in the PKI. Without proper verification, malicious actors could obtain certificates for identities they do not control, leading to impersonation attacks and breakdown of trust. Email verification ensures that the applicant controls the email address being certified, while private key ownership verification ensures that only the legitimate key holder can obtain or manage certificates for that key pair. This dual verification approach provides a reasonable balance between security and usability for a simplified CA implementation.
+
+\textbf{Implementation Details:} Email verification can be implemented through challenge-response mechanisms, while private key ownership can be verified through cryptographic challenges requiring digital signatures.
+
+\subsection{FR5: Public Key Publishing}
+
+\textbf{Requirement:} The CA must publish the issued certificates and its own public key so that users can validate certificate authenticity.
+
+\textbf{Justification:} Public availability of certificates and the CA's public key is essential for the certificate validation process. Relying parties need access to both the certificates they want to validate and the CA's public key to verify the certificate signatures. Without this public accessibility, the certificates would be useless for their intended purpose of enabling secure communications. The CA's public key serves as the trust anchor for the entire PKI, and its availability is crucial for establishing the chain of trust.
+
+\textbf{Implementation Details:} The system must provide standard interfaces for certificate retrieval and maintain a publicly accessible repository of issued certificates and CA public key information.
+
+\subsection{FR6: Certificate Renewal}
+
+\textbf{Requirement:} The CA must allow renewal of certificates before they expire, ensuring continuity of trust. This process must include identity verification challenges and verification that the certificate has not been revoked.
+
+\textbf{Justification:} Certificate renewal is critical for maintaining continuous service availability and trust relationships. Certificates have limited lifespans for security reasons, but the underlying trust relationships often need to persist beyond individual certificate validity periods. Renewal allows for the seamless transition from expiring certificates to new ones without disrupting established trust relationships. The verification requirements ensure that only legitimate certificate holders can renew their certificates and that revoked certificates cannot be renewed, maintaining security integrity.
+
+\textbf{Implementation Details:} The renewal process must verify the current certificate's validity status, perform identity verification equivalent to initial issuance, and ensure proper overlap periods to prevent service interruptions.
+
+\subsection{FR7: Cryptographic Algorithm Support}
+
+\textbf{Requirement:} The CA must support RSA and ECDSA cryptographic algorithms for certificate operations.
+
+\textbf{Justification:} Supporting multiple cryptographic algorithms ensures compatibility with diverse client requirements and provides flexibility for different security and performance needs. RSA remains widely deployed in legacy systems and provides well-understood security properties, while ECDSA offers better performance and smaller key sizes for equivalent security levels. Supporting both algorithms ensures that the CA can serve a broad range of clients while accommodating both current and emerging cryptographic preferences.
+
+\textbf{Implementation Details:} The system must handle key generation, signature creation, and verification for both RSA (minimum 2048-bit keys) and ECDSA (P-256 curve) algorithms.
 
 \section{Security Requirements}
-hecbai
+
+Security requirements define the protective measures and security properties that the Certificate Authority must maintain to ensure the integrity, confidentiality, and availability of the PKI services. These requirements address various threat models and attack vectors that could compromise the CA's operations.
+
+\subsection{SR1: Certificate Authenticity}
+
+\textbf{Requirement:} A certificate that contains a valid and correct signature from the CA must be considered authentic and trustworthy.
+
+\textbf{Justification:} Certificate authenticity forms the foundation of trust in the PKI system. The CA's digital signature on a certificate serves as the cryptographic proof that the certificate was issued by the legitimate CA and has not been tampered with. This requirement ensures that relying parties can confidently trust certificates that pass signature verification, enabling secure communications. Without reliable authenticity verification, the entire PKI system would be vulnerable to certificate forgery and impersonation attacks.
+
+\textbf{Implementation Details:} The system must use cryptographically strong signature algorithms, maintain secure signing procedures, and ensure that signature verification mechanisms are readily available to all relying parties.
+
+\subsection{SR2: Certificate Validity Verification}
+
+\textbf{Requirement:} A certificate that is expired or appears in the CRL must be considered invalid, even if it contains an authentic signature from the CA.
+
+\textbf{Justification:} Certificate validity encompasses more than just authenticity; it also includes temporal validity and revocation status. Expired certificates should not be trusted because they may represent outdated information or compromised keys that have exceeded their intended lifespan. Similarly, revoked certificates must be rejected regardless of their authentic signatures because they have been explicitly invalidated due to compromise or other security concerns. This requirement prevents the acceptance of certificates that may pose security risks despite being technically authentic.
+
+\textbf{Implementation Details:} All certificate validation processes must include expiration date checking and CRL consultation, with clear rejection of certificates that fail either test.
+
+\subsection{SR3: Secure Key Management}
+
+\textbf{Requirement:} The private key of the CA must be stored securely using Hardware Security Modules (HSMs) and protected against tampering, unauthorized access, and extraction.
+
+\textbf{Justification:} The CA's private key is the most critical security asset in the entire PKI system. If this key is compromised, attackers could forge certificates for any identity, completely undermining the trust infrastructure. Traditional software-based key storage is vulnerable to various attacks, including malware, insider threats, and system compromises. HSMs provide tamper-resistant hardware protection that ensures the private key never exists in plaintext outside the secure hardware boundary and that all cryptographic operations are performed within the protected environment.
+
+\textbf{Implementation Details:} The system must integrate with cloud-based HSM services, ensure all signing operations occur within the HSM, implement secure authentication for HSM access, and maintain audit trails of all key usage.
+
+\subsection{SR4: Authentication and Authorization}
+
+\textbf{Requirement:} All certificate management operations must be properly authenticated and authorized to prevent unauthorized access and malicious operations.
+
+\textbf{Justification:} Without proper authentication and authorization controls, malicious actors could perform unauthorized certificate operations such as requesting certificates for identities they don't control, revoking legitimate certificates, or accessing sensitive certificate information. These controls ensure that only authorized parties can perform specific operations and that all actions are traceable to authenticated identities.
+
+\textbf{Implementation Details:} The system must implement multi-factor authentication where appropriate, role-based access controls, and comprehensive audit logging of all administrative actions.
+
+\subsection{SR5: Data Integrity and Confidentiality}
+
+\textbf{Requirement:} All certificate data, configuration information, and audit logs must be protected against unauthorized modification and inappropriate disclosure.
+
+\textbf{Justification:} Data integrity ensures that certificate information remains accurate and trustworthy throughout its lifecycle. Unauthorized modifications could lead to invalid certificates being accepted or valid certificates being rejected. Confidentiality protections prevent sensitive information from being disclosed to unauthorized parties, which could facilitate attacks or privacy violations.
+
+\textbf{Implementation Details:} The system must implement database encryption, secure communication protocols, access controls, and integrity checking mechanisms for all stored data.
+
+\subsection{SR6: Availability and Resilience}
+
+\textbf{Requirement:} The CA services must maintain high availability and resilience against various failure modes and attack scenarios.
+
+\textbf{Justification:} CA unavailability can disrupt certificate validation processes across the entire PKI, potentially preventing legitimate users from accessing services or causing applications to reject valid certificates. High availability ensures that critical PKI services remain accessible when needed, maintaining trust and usability of the infrastructure.
+
+\textbf{Implementation Details:} The system must implement redundancy, failover mechanisms, backup procedures, and monitoring to detect and respond to availability threats.
+
+These requirements collectively define a comprehensive security posture that addresses the primary threats and vulnerabilities associated with Certificate Authority operations while ensuring the functional capabilities necessary for effective PKI services.

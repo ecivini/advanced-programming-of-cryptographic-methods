@@ -1,10 +1,290 @@
 \chapter{Technical Details}
 \label{Tools}
-vwhno
+
+This chapter provides comprehensive technical details about the Certificate Authority implementation, covering the system architecture, implementation technologies, and detailed code structure. The information presented here enables a thorough understanding of the technical decisions and implementation approaches used in this project.
 
 \section{Architecture}
-ejv
+
+The Certificate Authority system follows a microservices-based architecture designed for scalability, security, and maintainability. The system is composed of several distinct modules that work together to provide comprehensive PKI services.
+
+\subsection{High-Level Architecture}
+
+The system architecture consists of four primary components:
+
+\begin{enumerate}
+    \item \textbf{CA Backend Server}: A Go-based REST API server that handles all certificate operations, including issuance, revocation, and validation.
+    
+    \item \textbf{Web User Interface}: A Next.js-based frontend application that provides an intuitive interface for certificate management operations.
+    
+    \item \textbf{Database Layer}: MongoDB database for persistent storage of certificates, revocation lists, and audit information.
+    
+    \item \textbf{Hardware Security Module (HSM)}: Cloud-based HSM integration for secure cryptographic operations and private key protection.
+\end{enumerate}
+
+\subsection{Component Interaction}
+
+The architecture follows a layered approach with clear separation of concerns:
+
+\begin{itemize}
+    \item \textbf{Presentation Layer}: The web UI communicates with the CA backend through RESTful API calls, handling user interactions and data visualization.
+    
+    \item \textbf{Business Logic Layer}: The CA server implements all PKI business logic, including certificate lifecycle management, validation rules, and identity verification processes.
+    
+    \item \textbf{Data Persistence Layer}: MongoDB provides reliable storage for certificates, CRL entries, and operational logs with support for complex queries and indexing.
+    
+    \item \textbf{Security Layer}: HSM integration ensures that all cryptographic operations involving the CA's private key are performed within secure hardware boundaries.
+\end{itemize}
+
+\subsection{Security Architecture}
+
+The security architecture implements defense-in-depth principles:
+
+\begin{itemize}
+    \item \textbf{HSM Integration}: All CA private key operations are performed within the HSM, ensuring the key never exists in plaintext outside secure hardware.
+    
+    \item \textbf{Authentication Mechanisms}: Multi-layered authentication including email verification and private key ownership proof.
+    
+    \item \textbf{Secure Communications}: All inter-component communications use encrypted channels with proper certificate validation.
+    
+    \item \textbf{Data Protection}: Database encryption and access controls protect stored certificate information and audit logs.
+\end{itemize}
+
+\subsection{Deployment Architecture}
+
+The system is containerized using Docker for consistent deployment across different environments:
+
+\begin{itemize}
+    \item Each major component runs in its own Docker container
+    \item Docker Compose orchestrates multi-container deployment
+    \item Environment-specific configurations through environment variables
+    \item Persistent storage volumes for database data
+\end{itemize}
+
 \section{Implementation}
-sv
+
+This section details the technical implementation aspects, including programming languages, frameworks, libraries, and key implementation decisions.
+
+\subsection{Backend Implementation}
+
+\textbf{Programming Language}: Go (Golang) 1.21+
+
+\textbf{Justification}: Go was chosen for the backend implementation due to its excellent performance characteristics, strong standard library for cryptographic operations, robust concurrency support, and extensive ecosystem for web service development.
+
+\textbf{Key Libraries and Frameworks}:
+
+\begin{itemize}
+    \item \textbf{Gorilla Mux}: HTTP router and URL matcher for building REST APIs with support for middleware and route variables.
+    
+    \item \textbf{MongoDB Driver}: Official Go driver for MongoDB (go.mongodb.org/mongo-driver/v2) providing high-performance database operations with built-in connection pooling.
+    
+    \item \textbf{AWS SDK for Go}: Integration with AWS KMS for HSM operations, providing secure key management and cryptographic operations.
+    
+    \item \textbf{Go Standard Crypto Libraries}: Extensive use of crypto/x509, crypto/rsa, crypto/ecdsa, and crypto/rand for certificate operations and cryptographic functions.
+    
+    \item \textbf{SMTP Libraries}: Email verification and notification capabilities using Go's net/smtp package and third-party extensions.
+\end{itemize}
+
+\subsection{Frontend Implementation}
+
+\textbf{Framework}: Next.js 15.3.2 with React 19.0.0
+
+\textbf{Justification}: Next.js provides server-side rendering capabilities, excellent developer experience, and robust production optimizations. React's component-based architecture enables maintainable and reusable UI components.
+
+\textbf{Key Technologies}:
+
+\begin{itemize}
+    \item \textbf{Tailwind CSS 4.0}: Utility-first CSS framework for rapid UI development with consistent design systems and responsive layouts.
+    
+    \item \textbf{Web Crypto API}: Browser-native cryptographic operations for client-side key generation, signing, and certificate validation without requiring external libraries.
+    
+    \item \textbf{Next.js App Router}: Modern routing system with nested layouts and server components for optimal performance.
+    
+    \item \textbf{React Hooks}: State management and lifecycle handling using modern React patterns including useState, useEffect, and custom hooks.
+\end{itemize}
+
+\subsection{Database Implementation}
+
+\textbf{Database}: MongoDB 7.0+
+
+\textbf{Justification}: MongoDB's document-oriented structure is well-suited for storing certificate data with varying fields and complex nested structures. Its built-in indexing and query capabilities support efficient certificate lookups and CRL operations.
+
+\textbf{Key Features Utilized}:
+
+\begin{itemize}
+    \item \textbf{Document Storage}: Flexible schema for certificate metadata, CRL entries, and audit logs
+    \item \textbf{Indexing}: Optimized queries for certificate serial numbers, email addresses, and revocation status
+    \item \textbf{Aggregation Pipeline}: Complex queries for certificate statistics and reporting
+    \item \textbf{GridFS}: Large file storage for certificate and key material when needed
+\end{itemize}
+
+\subsection{HSM Integration}
+
+\textbf{HSM Provider}: AWS KMS (Key Management Service)
+
+\textbf{Implementation Approach}:
+
+\begin{itemize}
+    \item \textbf{Customer Master Keys (CMK)}: Dedicated CMK for CA operations with hardware-level protection
+    \item \textbf{AWS SDK Integration}: Programmatic access to KMS operations through official AWS SDK
+    \item \textbf{Signing Operations}: All certificate signing performed via KMS API calls
+    \item \textbf{Key Rotation}: Support for automatic key rotation policies
+    \item \textbf{Audit Logging}: Comprehensive logging of all HSM operations through AWS CloudTrail
+\end{itemize}
+
+\subsection{Containerization and Deployment}
+
+\textbf{Container Technology}: Docker with Docker Compose
+
+\textbf{Container Configuration}:
+
+\begin{itemize}
+    \item \textbf{Multi-stage Builds}: Optimized Docker images with separate build and runtime stages
+    \item \textbf{Environment Variables}: Externalized configuration for different deployment environments
+    \item \textbf{Health Checks}: Container health monitoring and automatic restart capabilities
+    \item \textbf{Volume Management}: Persistent storage for database data and certificates
+\end{itemize}
+
 \section{Code Structure}
-sv
+
+This section provides a detailed description of the project's code organization, explaining the purpose and functionality of each component.
+
+\subsection{Project Root Structure}
+
+The project follows a monorepo structure with clear separation between different services:
+
+\begin{verbatim}
+advanced-programming-of-cryptographic-methods/
+|-- ca/                 # Backend CA server
+|-- ui/                 # Frontend web application
+|-- dev-certs/          # Development certificates
+|-- report/             # Project documentation
+|-- docker-compose.yml  # Container orchestration
+|-- mongod.conf         # MongoDB configuration
+`-- README.md           # Project overview
+\end{verbatim}
+
+\subsection{Backend Code Structure (ca/)}
+
+The backend follows Go's standard project layout with clear separation of concerns:
+
+\subsubsection{Main Application (cmd/)}
+
+\begin{itemize}
+    \item \textbf{cmd/server/main.go}: Application entry point that initializes all services (HSM, database, email) and starts the HTTP server. Handles dependency injection and graceful shutdown procedures.
+\end{itemize}
+
+\subsubsection{Internal Packages (internal/)}
+
+\begin{itemize}
+    \item \textbf{internal/config/config.go}: Centralized configuration management using environment variables. Handles database connections, HSM credentials, email settings, and server parameters.
+    
+    \item \textbf{internal/db/}: Database abstraction layer
+    \begin{itemize}
+        \item \textbf{db.go}: Database connection management and initialization
+        \item \textbf{models.go}: Data models for certificates, CRL entries, and audit logs
+    \end{itemize}
+    
+    \item \textbf{internal/email/email.go}: Email service implementation for identity verification and notifications. Supports SMTP configuration and template-based email generation.
+    
+    \item \textbf{internal/hsm/hsm.go}: Hardware Security Module integration layer. Provides abstraction over AWS KMS operations including key creation, signing, and key management.
+    
+    \item \textbf{internal/server/}: HTTP server implementation
+    \begin{itemize}
+        \item \textbf{server.go}: HTTP server initialization, middleware configuration, and route setup
+        \item \textbf{handlers/}: Request handlers organized by functionality
+        \begin{itemize}
+            \item \textbf{health.go}: Health check endpoints for monitoring
+            \item \textbf{info.go}: CA information and public key endpoints
+            \item \textbf{utils.go}: Common handler utilities and response formatting
+            \item \textbf{certificate/}: Certificate-specific handlers
+            \begin{itemize}
+                \item \textbf{handler.go}: Certificate issuance, revocation, and validation endpoints
+                \item \textbf{repository.go}: Database operations for certificate management
+            \end{itemize}
+        \end{itemize}
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Configuration Files}
+
+\begin{itemize}
+    \item \textbf{go.mod/go.sum}: Go module dependencies and version management
+    \item \textbf{Dockerfile}: Multi-stage Docker build configuration for optimized container images
+\end{itemize}
+
+\subsection{Frontend Code Structure (ui/)}
+
+The frontend follows Next.js 13+ app directory structure with modern React patterns:
+
+\subsubsection{Application Core (app/)}
+
+\begin{itemize}
+    \item \textbf{layout.js}: Root layout component with global styles, navigation, and shared UI elements
+    \item \textbf{page.js}: Home page component with CA overview and navigation links
+    \item \textbf{globals.css}: Global CSS styles including Tailwind CSS imports and custom component styles
+    \item \textbf{favicon.ico}: Application favicon
+\end{itemize}
+
+\subsubsection{Feature Pages (app/)}
+
+\begin{itemize}
+    \item \textbf{sign/page.js}: Certificate signing interface with CSR upload, key generation, and email verification workflows
+    \item \textbf{certs/page.js}: Certificate viewer and revocation interface with ASN.1 parsing and cryptographic operations
+    \item \textbf{crl/page.js}: Certificate Revocation List viewer with pagination and search capabilities
+    \item \textbf{commit/page.js}: Certificate commitment and validation interface
+\end{itemize}
+
+\subsubsection{Utility Modules (utils/)}
+
+\begin{itemize}
+    \item \textbf{crypto.js}: Client-side cryptographic utilities including key generation, signing, and certificate validation using Web Crypto API
+    \item \textbf{pemUtils.js}: PEM format parsing and manipulation utilities for certificate and key handling
+\end{itemize}
+
+\subsubsection{Configuration Files}
+
+\begin{itemize}
+    \item \textbf{package.json}: Node.js dependencies and build scripts
+    \item \textbf{next.config.mjs}: Next.js configuration including build optimizations and deployment settings
+    \item \textbf{postcss.config.mjs}: PostCSS configuration for Tailwind CSS processing
+    \item \textbf{jsconfig.json}: JavaScript/TypeScript configuration for IDE support
+    \item \textbf{Dockerfile}: Frontend container build configuration
+\end{itemize}
+
+\subsubsection{Static Assets (public/)}
+
+\begin{itemize}
+    \item \textbf{*.svg}: UI icons and graphics including Next.js branding and custom icons
+\end{itemize}
+
+\subsection{Development and Deployment Support}
+
+\subsubsection{Development Certificates (dev-certs/)}
+
+\begin{itemize}
+    \item \textbf{dev-ca.key/dev-ca.pem}: Development CA key pair for testing
+    \item \textbf{mongodb.*}: MongoDB SSL certificates for secure database connections
+    \item \textbf{root.pem}: Root certificate for development trust chain
+\end{itemize}
+
+\subsubsection{Container Orchestration}
+
+\begin{itemize}
+    \item \textbf{docker-compose.yml}: Multi-container application orchestration including MongoDB, local KMS, CA server, and frontend services
+    \item \textbf{mongod.conf}: MongoDB server configuration including security settings and connection parameters
+\end{itemize}
+
+\subsection{Code Quality and Maintainability}
+
+The codebase implements several best practices for maintainability and reliability:
+
+\begin{itemize}
+    \item \textbf{Separation of Concerns}: Clear boundaries between presentation, business logic, and data layers
+    \item \textbf{Error Handling}: Comprehensive error handling with appropriate logging and user feedback
+    \item \textbf{Configuration Management}: Externalized configuration through environment variables
+    \item \textbf{Security Practices}: Input validation, secure defaults, and defense-in-depth implementation
+    \item \textbf{Documentation}: Inline code comments and comprehensive API documentation
+    \item \textbf{Testing Support}: Structure conducive to unit testing and integration testing
+\end{itemize}
+
+This code structure provides a solid foundation for a production-ready Certificate Authority system while maintaining flexibility for future enhancements and scaling requirements.

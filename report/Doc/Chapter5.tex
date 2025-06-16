@@ -1,2 +1,257 @@
 \chapter{Known Limitations}
-c
+
+This chapter provides a comprehensive analysis of the known limitations of the implemented Certificate Authority system. Understanding these limitations is crucial for proper deployment, risk assessment, and future development planning. The limitations are categorized by their nature and impact on the system's functionality and security.
+
+\section{Functional Limitations}
+
+\subsection{Limited Identity Verification}
+
+\textbf{Limitation:} The current implementation uses simplified identity verification mechanisms compared to commercial Certificate Authorities.
+
+\textbf{Description:} The system only verifies email ownership and private key possession, lacking the comprehensive identity validation processes used by production CAs. Real-world CAs typically perform:
+\begin{itemize}
+    \item Document-based identity verification (government IDs, business registrations)
+    \item Domain validation for web certificates
+    \item Extended validation procedures for high-assurance certificates
+    \item Physical presence verification for certain certificate types
+\end{itemize}
+
+\textbf{Impact:} This limitation reduces the trust level that can be placed in issued certificates and makes the system unsuitable for high-stakes applications requiring strong identity assurance.
+
+\textbf{Mitigation:} For production use, additional verification layers would need to be implemented, including integration with official identity verification services and document validation systems.
+
+\subsection{Simplified Certificate Profiles}
+
+\textbf{Limitation:} The system implements basic X.509 certificate profiles without the full range of extensions and policies used in production environments.
+
+\textbf{Description:} The current implementation lacks support for:
+\begin{itemize}
+    \item Certificate policy extensions
+    \item Authority Information Access (AIA) extensions
+    \item Subject Alternative Names (SAN) for multiple identities
+    \item Key usage constraints and extended key usage
+    \item Certificate transparency integration
+    \item Custom extension fields for specific use cases
+\end{itemize}
+
+\textbf{Impact:} Generated certificates may not be fully compatible with all applications and use cases that require specific certificate extensions or policy compliance.
+
+\textbf{Mitigation:} Future development should include configurable certificate profiles and support for standard X.509 extensions based on intended use cases.
+
+\subsection{Limited Revocation Mechanisms}
+
+\textbf{Limitation:} The system only implements Certificate Revocation Lists (CRL) without support for more modern revocation mechanisms.
+
+\textbf{Description:} Missing revocation features include:
+\begin{itemize}
+    \item Online Certificate Status Protocol (OCSP) support
+    \item OCSP stapling capabilities
+    \item Delta CRLs for efficient updates
+    \item Revocation reason codes and detailed status information
+    \item Automatic revocation based on compromise detection
+\end{itemize}
+
+\textbf{Impact:} Revocation checking may be slower and less efficient than modern alternatives, potentially affecting application performance and user experience.
+
+\textbf{Mitigation:} OCSP implementation should be prioritized for production deployment to provide real-time revocation status checking.
+
+\section{Security Limitations}
+
+\subsection{Simplified Trust Model}
+
+\textbf{Limitation:} The system implements a simplified trust model without the hierarchical certificate chains used in production PKI deployments.
+
+\textbf{Description:} Current limitations include:
+\begin{itemize}
+    \item Single-level CA hierarchy (no intermediate CAs)
+    \item No support for cross-certification
+    \item Limited policy enforcement mechanisms
+    \item No separation of duties for different certificate types
+    \item Absence of certificate path validation complexity
+\end{itemize}
+
+\textbf{Impact:} The simplified trust model may not scale to complex organizational structures or meet enterprise security requirements that demand hierarchical trust relationships.
+
+\textbf{Mitigation:} Future versions should support intermediate CAs and configurable trust hierarchies to match real-world deployment scenarios.
+
+\subsection{Limited Audit and Compliance Features}
+
+\textbf{Limitation:} The current implementation lacks comprehensive audit logging and compliance features required for regulatory environments.
+
+\textbf{Description:} Missing audit capabilities include:
+\begin{itemize}
+    \item Tamper-evident audit logs
+    \item Real-time security monitoring
+    \item Compliance reporting for standards like Common Criteria
+    \item Detailed forensic logging capabilities
+    \item Integration with Security Information and Event Management (SIEM) systems
+\end{itemize}
+
+\textbf{Impact:} The system may not meet regulatory requirements for financial, healthcare, or government applications that mandate specific audit and compliance standards.
+
+\textbf{Mitigation:} Enhanced logging and monitoring capabilities should be implemented to support compliance with relevant standards and regulations.
+
+\subsection{Key Management Limitations}
+
+\textbf{Limitation:} While HSM integration provides secure key storage, the system lacks advanced key management features found in enterprise solutions.
+
+\textbf{Description:} Current key management limitations include:
+\begin{itemize}
+    \item No automatic key rotation policies
+    \item Limited key backup and recovery procedures
+    \item No support for key escrow or split knowledge
+    \item Absence of hardware attestation mechanisms
+    \item Limited integration with external key management systems
+\end{itemize}
+
+\textbf{Impact:} These limitations may affect long-term key security and disaster recovery capabilities in production environments.
+
+\textbf{Mitigation:} Implementation of comprehensive key lifecycle management policies and procedures would enhance the security posture.
+
+\section{Scalability and Performance Limitations}
+
+\subsection{Database Scalability}
+
+\textbf{Limitation:} The current MongoDB implementation may face scalability challenges under high certificate volume scenarios.
+
+\textbf{Description:} Potential scalability issues include:
+\begin{itemize}
+    \item Single database instance without sharding
+    \item Limited optimization for high-throughput certificate operations
+    \item No built-in caching mechanisms for frequently accessed data
+    \item Absence of read replicas for load distribution
+    \item Lack of automated database maintenance procedures
+\end{itemize}
+
+\textbf{Impact:} Performance may degrade significantly under high load, potentially affecting service availability and response times.
+
+\textbf{Mitigation:} Database clustering, caching layers, and performance optimization would be necessary for high-volume production deployment.
+
+\subsection{HSM Performance Constraints}
+
+\textbf{Limitation:} Cloud HSM operations introduce latency that may limit certificate issuance throughput.
+
+\textbf{Description:} HSM-related performance limitations include:
+\begin{itemize}
+    \item Network latency for each signing operation
+    \item Limited concurrent HSM operations
+    \item No local caching of non-sensitive operations
+    \item Dependency on external HSM service availability
+    \item Potential cost implications for high-volume operations
+\end{itemize}
+
+\textbf{Impact:} Certificate issuance rates may be constrained by HSM performance, potentially creating bottlenecks during peak usage periods.
+
+\textbf{Mitigation:} Implementation of operation batching, local caching where appropriate, and HSM capacity planning would improve performance.
+
+\section{Operational Limitations}
+
+\subsection{Monitoring and Alerting}
+
+\textbf{Limitation:} The system lacks comprehensive monitoring and alerting capabilities required for production operations.
+
+\textbf{Description:} Missing operational features include:
+\begin{itemize}
+    \item Real-time system health monitoring
+    \item Automated alerting for security events
+    \item Performance metrics collection and analysis
+    \item Capacity planning and forecasting tools
+    \item Integration with enterprise monitoring solutions
+\end{itemize}
+
+\textbf{Impact:} Operations teams may not have sufficient visibility into system health and performance, potentially leading to delayed incident response.
+
+\textbf{Mitigation:} Implementation of comprehensive monitoring infrastructure and operational dashboards would improve system observability.
+
+\subsection{Backup and Disaster Recovery}
+
+\textbf{Limitation:} The current implementation lacks comprehensive backup and disaster recovery procedures.
+
+\textbf{Description:} Current limitations include:
+\begin{itemize}
+    \item No automated backup procedures for certificate data
+    \item Limited disaster recovery testing and procedures
+    \item Absence of geographic redundancy
+    \item No point-in-time recovery capabilities
+    \item Limited business continuity planning
+\end{itemize}
+
+\textbf{Impact:} System failures could result in significant downtime and potential data loss, affecting service availability and trust.
+
+\textbf{Mitigation:} Development of comprehensive backup strategies and disaster recovery procedures would be essential for production deployment.
+
+\section{User Experience Limitations}
+
+\subsection{Limited User Interface Features}
+
+\textbf{Limitation:} The web interface provides basic functionality but lacks advanced features expected in modern certificate management systems.
+
+\textbf{Description:} UI limitations include:
+\begin{itemize}
+    \item Basic certificate lifecycle management
+    \item Limited search and filtering capabilities
+    \item No bulk operations support
+    \item Absence of advanced certificate analytics
+    \item Limited customization options
+    \item No mobile-responsive design optimization
+\end{itemize}
+
+\textbf{Impact:} User productivity may be limited, and the system may not meet the usability expectations of modern certificate management workflows.
+
+\textbf{Mitigation:} UI enhancement with advanced features and improved user experience design would increase system adoption and efficiency.
+
+\subsection{API Limitations}
+
+\textbf{Limitation:} The REST API provides core functionality but lacks advanced features required for enterprise integration.
+
+\textbf{Description:} API limitations include:
+\begin{itemize}
+    \item Basic CRUD operations without advanced query capabilities
+    \item No pagination for large result sets
+    \item Limited error handling and status reporting
+    \item Absence of webhook support for event notifications
+    \item No API versioning strategy
+    \item Limited documentation and SDK support
+\end{itemize}
+
+\textbf{Impact:} Integration with external systems may be challenging, and the API may not scale to meet enterprise application requirements.
+
+\textbf{Mitigation:} API enhancement with advanced features, comprehensive documentation, and SDK development would improve integration capabilities.
+
+\section{Compliance and Standards Limitations}
+
+\subsection{Standards Compliance}
+
+\textbf{Limitation:} While the system implements basic X.509 standards, it lacks full compliance with advanced PKI standards and best practices.
+
+\textbf{Description:} Standards compliance gaps include:
+\begin{itemize}
+    \item Partial RFC 5280 compliance
+    \item No Common Criteria evaluation
+    \item Limited FIPS 140-2 compliance verification
+    \item Absence of WebTrust or similar audit frameworks
+    \item No compliance with specific industry standards (e.g., CA/Browser Forum requirements)
+\end{itemize}
+
+\textbf{Impact:} The system may not be suitable for environments requiring specific compliance certifications or industry-standard validation.
+
+\textbf{Mitigation:} Comprehensive standards compliance assessment and implementation would be necessary for regulated industry deployment.
+
+\section{Future Enhancement Recommendations}
+
+To address these limitations, future development should prioritize:
+
+\begin{enumerate}
+    \item Implementation of comprehensive identity verification mechanisms
+    \item Development of hierarchical CA support and intermediate certificates
+    \item Integration of OCSP and modern revocation mechanisms
+    \item Enhancement of audit logging and compliance features
+    \item Performance optimization and scalability improvements
+    \item Development of comprehensive operational monitoring
+    \item Implementation of disaster recovery and business continuity procedures
+    \item UI/UX improvements and mobile responsiveness
+    \item API enhancement with enterprise integration features
+    \item Standards compliance assessment and implementation
+\end{enumerate}
+
+Understanding these limitations is essential for making informed decisions about deployment scenarios, risk assessment, and future development priorities. While these limitations exist, the current implementation provides a solid foundation for a Certificate Authority system that can be enhanced to meet more demanding requirements as needed.
