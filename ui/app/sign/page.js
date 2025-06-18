@@ -1,147 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-
-const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
-
-// Detect key type and size from PEM
-function detectKeyType(pem) {
-  const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const byteLen = (b64.length * 3) / 4;
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) return 'ECDSA';
-  if (byteLen > 4000) return 'RSA_4096';
-  if (byteLen > 300) return 'RSA_2048';
-  return 'ECDSA';
-}
-
-// Convert PKCS#1 (traditional RSA) to PKCS#8
-function convertPKCS1toPKCS8(pkcs1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const rsaOID = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86,
-    0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
-  const pkcs1Len = pkcs1.length;
-  let wrapper;
-  if (pkcs1Len < 0x80) {
-    wrapper = Uint8Array.from([0x04, pkcs1Len]);
-  } else if (pkcs1Len < 0x100) {
-    wrapper = Uint8Array.from([0x04, 0x81, pkcs1Len]);
-  } else {
-    wrapper = Uint8Array.from([0x04, 0x82, (pkcs1Len >> 8), (pkcs1Len & 0xff)]);
-  }
-  const content = new Uint8Array([...version, ...rsaOID, ...wrapper, ...pkcs1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-// Convert SEC1 (traditional EC) to PKCS#8
-function convertSEC1toPKCS8(sec1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const ecOID = Uint8Array.from([0x30, 0x13, 0x06, 0x07, 0x2a, 0x86,
-    0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
-    0xce, 0x3d, 0x03, 0x01, 0x07]);
-  const privOctet = Uint8Array.from([0x04, sec1.length]);
-  const content = new Uint8Array([...version, ...ecOID, ...privOctet, ...sec1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-// DER-encode raw ECDSA signature (r | s)
-function encodeECDSASignatureToDER(r, s) {
-  const encodeInt = (i) => {
-    let start = 0;
-    while (start < i.length && i[start] === 0) start++;
-    let trimmed = i.slice(start) || Uint8Array.from([0]);
-    if (trimmed[0] & 0x80) {
-      const prefixed = new Uint8Array(trimmed.length + 1);
-      prefixed.set([0], 0);
-      prefixed.set(trimmed, 1);
-      trimmed = prefixed;
-    }
-    const len = trimmed.length;
-    return Uint8Array.from([0x02, len, ...trimmed]);
-  };
-  const rDer = encodeInt(r);
-  const sDer = encodeInt(s);
-  const seqLen = rDer.length + sDer.length;
-  const header = seqLen < 0x80
-    ? Uint8Array.from([0x30, seqLen])
-    : Uint8Array.from([0x30, 0x81, seqLen]);
-  return new Uint8Array([...header, ...rDer, ...sDer]);
-}
-
-// Import PEM private key for signing
-async function importPrivateKey(pem) {
-  const raw = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const bin = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertSEC1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false, ['sign']
-    );
-  }
-  if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertPKCS1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
-      false, ['sign']
-    );
-  }
-  const alg = detectKeyType(pem).startsWith('ECDSA')
-    ? { name: 'ECDSA', namedCurve: 'P-256' }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-  return crypto.subtle.importKey(
-    'pkcs8', bin.buffer,
-    alg, false, ['sign']
-  );
-}
-
-// Sign the base64 challenge and return properly encoded signature
-async function signChallenge(pem, challengeB64) {
-  // import key and raw challenge bytes
-  const key = await importPrivateKey(pem);
-  const rawChallenge = Uint8Array.from(atob(challengeB64), c => c.charCodeAt(0));
-
-  // choose algorithm based on key type
-  const algParams = key.algorithm.name === 'ECDSA'
-    ? { name: 'ECDSA', hash: { name: 'SHA-256' } }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-
-  // generate signature ArrayBuffer
-  const sigBuffer = await crypto.subtle.sign(algParams, key, rawChallenge);
-  const sigBytes = new Uint8Array(sigBuffer);
-
-  if (key.algorithm.name === 'ECDSA') {
-    // Web Crypto ECDSA yields raw r|s concat; encode to DER
-    const half = sigBytes.length / 2;
-    const derSig = encodeECDSASignatureToDER(
-      sigBytes.slice(0, half),
-      sigBytes.slice(half)
-    );
-    return btoa(String.fromCharCode(...derSig));
-  }
-
-  // RSA: base64 of raw signature bytes
-  return btoa(String.fromCharCode(...sigBytes));
-}
+import { CA_URL } from '../utils/constants';
+import { signChallenge } from '../utils/crypto';
+import { handleFileUpload } from '../utils/ui';
+import { makeApiRequest, parseErrorResponse } from '../utils/api';
 
 export default function SignPage() {
   const [challenge, setChallenge] = useState('');
@@ -150,13 +13,7 @@ export default function SignPage() {
   const [status, setStatus] = useState(null);
   const [certificate, setCertificate] = useState('');
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setPrivateKey(reader.result);
-    reader.readAsText(file);
-  };
+  const privateKeyUploader = handleFileUpload(setPrivateKey);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -178,34 +35,13 @@ export default function SignPage() {
       setStatus('Requesting certificate...');
 
       // Request certificate from CA
-      const response = await fetch(`${CA_URL}/v1/certificate`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          signature: signature, 
-          challenge: challengeTrimmed 
-        }),
-      });
+      const response = await makeApiRequest(`${CA_URL}/v1/certificate`, {
+        signature: signature, 
+        challenge: challengeTrimmed 
+      }, 'PUT', false); // expect text response (PEM certificate)
 
-      const contentType = response.headers.get('content-type') || '';
-      
-      if (!response.ok) {
-        let errorMessage;
-        if (contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || JSON.stringify(errorData);
-        } else {
-          errorMessage = await response.text();
-        }
-        throw new Error(errorMessage || `Certificate request failed: HTTP ${response.status}`);
-      }
-
-      // Parse response
-      const data = contentType.includes('application/json')
-        ? await response.json()
-        : { certificate: await response.text() };
-
-      setCertificate(data.certificate);
+      // The API function now returns the certificate text directly
+      setCertificate(response);
       setStatus('✅ Certificate generated successfully!');
     } catch (error) {
       console.error('Certificate signing error:', error);
@@ -268,7 +104,7 @@ export default function SignPage() {
                 <input
                   type="file"
                   accept=".pem,.key,.txt"
-                  onChange={handleFileUpload}
+                  onChange={privateKeyUploader}
                   className="hidden"
                   id="privateKeyFileInput"
                   disabled={isLoading}

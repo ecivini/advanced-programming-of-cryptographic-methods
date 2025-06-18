@@ -1,5 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import { CA_URL } from '../utils/constants';
 
 export default function CrlPage() {
   const [crl, setCrl] = useState([]);
@@ -15,7 +16,7 @@ export default function CrlPage() {
         setLoading(true);
         setError(null);
         
-        const crlURL = `${process.env.NEXT_PUBLIC_CA_URL}/v1/crl?page=${page}&page_size=${pageSize}`;
+        const crlURL = `${CA_URL}/v1/crl?page=${page}&page_size=${pageSize}`;
         const res = await fetch(crlURL);
         
         if (!res.ok) {

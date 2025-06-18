@@ -1,137 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-
-const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
-
-// Import crypto functions from sign page
-function detectKeyType(pem) {
-  const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const byteLen = (b64.length * 3) / 4;
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) return 'ECDSA';
-  if (byteLen > 4000) return 'RSA_4096';
-  if (byteLen > 300) return 'RSA_2048';
-  return 'ECDSA';
-}
-
-function convertPKCS1toPKCS8(pkcs1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const rsaOID = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86,
-    0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
-  const pkcs1Len = pkcs1.length;
-  let wrapper;
-  if (pkcs1Len < 0x80) {
-    wrapper = Uint8Array.from([0x04, pkcs1Len]);
-  } else if (pkcs1Len < 0x100) {
-    wrapper = Uint8Array.from([0x04, 0x81, pkcs1Len]);
-  } else {
-    wrapper = Uint8Array.from([0x04, 0x82, (pkcs1Len >> 8), (pkcs1Len & 0xff)]);
-  }
-  const content = new Uint8Array([...version, ...rsaOID, ...wrapper, ...pkcs1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-function convertSEC1toPKCS8(sec1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const ecOID = Uint8Array.from([0x30, 0x13, 0x06, 0x07, 0x2a, 0x86,
-    0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
-    0xce, 0x3d, 0x03, 0x01, 0x07]);
-  const privOctet = Uint8Array.from([0x04, sec1.length]);
-  const content = new Uint8Array([...version, ...ecOID, ...privOctet, ...sec1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-function encodeECDSASignatureToDER(r, s) {
-  const encodeInt = (i) => {
-    let start = 0;
-    while (start < i.length && i[start] === 0) start++;
-    let trimmed = i.slice(start) || Uint8Array.from([0]);
-    if (trimmed[0] & 0x80) {
-      const prefixed = new Uint8Array(trimmed.length + 1);
-      prefixed.set([0], 0);
-      prefixed.set(trimmed, 1);
-      trimmed = prefixed;
-    }
-    const len = trimmed.length;
-    return Uint8Array.from([0x02, len, ...trimmed]);
-  };
-  const rDer = encodeInt(r);
-  const sDer = encodeInt(s);
-  const seqLen = rDer.length + sDer.length;
-  const header = seqLen < 0x80
-    ? Uint8Array.from([0x30, seqLen])
-    : Uint8Array.from([0x30, 0x81, seqLen]);
-  return new Uint8Array([...header, ...rDer, ...sDer]);
-}
-
-async function importPrivateKey(pem) {
-  const raw = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const bin = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertSEC1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false, ['sign']
-    );
-  }
-  if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertPKCS1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
-      false, ['sign']
-    );
-  }
-  const alg = detectKeyType(pem).startsWith('ECDSA')
-    ? { name: 'ECDSA', namedCurve: 'P-256' }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-  return crypto.subtle.importKey(
-    'pkcs8', bin.buffer,
-    alg, false, ['sign']
-  );
-}
-
-async function signMessage(pem, message) {
-  const key = await importPrivateKey(pem);
-  const messageBytes = new TextEncoder().encode(message);
-
-  const algParams = key.algorithm.name === 'ECDSA'
-    ? { name: 'ECDSA', hash: { name: 'SHA-256' } }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-
-  const sigBuffer = await crypto.subtle.sign(algParams, key, messageBytes);
-  const sigBytes = new Uint8Array(sigBuffer);
-
-  if (key.algorithm.name === 'ECDSA') {
-    const half = sigBytes.length / 2;
-    const derSig = encodeECDSASignatureToDER(
-      sigBytes.slice(0, half),
-      sigBytes.slice(half)
-    );
-    return btoa(String.fromCharCode(...derSig));
-  }
-
-  return btoa(String.fromCharCode(...sigBytes));
-}
+import { CA_URL } from '../utils/constants';
+import { signMessage } from '../utils/crypto';
+import { handleFileUpload } from '../utils/ui';
+import { makeApiRequest } from '../utils/api';
 
 export default function RevokePage() {
   const [serialNumber, setSerialNumber] = useState('');
@@ -140,6 +13,8 @@ export default function RevokePage() {
   const [isRevoking, setIsRevoking] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+
+  const privateKeyUploader = handleFileUpload(setPrivateKey);
 
   // Check for serial number in URL on page load
   useEffect(() => {
@@ -161,18 +36,6 @@ export default function RevokePage() {
     }
   }, [serialNumber]);
 
-  // Handle private key file upload
-  const handlePrivateKeyUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPrivateKey(e.target.result);
-      };
-      reader.readAsText(file);
-    }
-  };
-
   // Revoke certificate
   const revokeCertificate = async () => {
     if (!serialNumber.trim() || !privateKey.trim() || !revocationMessage.trim()) {
@@ -189,26 +52,9 @@ export default function RevokePage() {
       const signature = await signMessage(privateKey, revocationMessage);
 
       // Send revocation request to CA
-      const response = await fetch(`${CA_URL}/v1/certificate/revoke`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serial_number: serialNumber,
-          signature: signature
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage;
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || JSON.stringify(errorData);
-        } else {
-          errorMessage = await response.text();
-        }
-        throw new Error(errorMessage || `Revocation failed: HTTP ${response.status}`);
-      }
+      await makeApiRequest(`${CA_URL}/v1/certificate/${serialNumber}/revoke`, {
+        signature: signature
+      }, 'POST', true); // expect JSON response
 
       setSuccess(true);
       setError('✅ Certificate revoked successfully!');
@@ -331,7 +177,7 @@ export default function RevokePage() {
                   <input
                     type="file"
                     accept=".pem,.key,.txt"
-                    onChange={handlePrivateKeyUpload}
+                    onChange={privateKeyUploader}
                     className="hidden"
                     id="privateKeyFileInput"
                     disabled={isRevoking}
@@ -341,7 +187,7 @@ export default function RevokePage() {
                     className={`btn btn-secondary cursor-pointer ${isRevoking ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1721 9z" />
                     </svg>
                     Upload Private Key
                   </label>

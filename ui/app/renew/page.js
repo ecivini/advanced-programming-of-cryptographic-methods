@@ -1,144 +1,21 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-
-const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
-
-// Import crypto functions from sign page
-function detectKeyType(pem) {
-  const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const byteLen = (b64.length * 3) / 4;
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) return 'ECDSA';
-  if (byteLen > 4000) return 'RSA_4096';
-  if (byteLen > 300) return 'RSA_2048';
-  return 'ECDSA';
-}
-
-function convertPKCS1toPKCS8(pkcs1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const rsaOID = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86,
-    0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
-  const pkcs1Len = pkcs1.length;
-  let wrapper;
-  if (pkcs1Len < 0x80) {
-    wrapper = Uint8Array.from([0x04, pkcs1Len]);
-  } else if (pkcs1Len < 0x100) {
-    wrapper = Uint8Array.from([0x04, 0x81, pkcs1Len]);
-  } else {
-    wrapper = Uint8Array.from([0x04, 0x82, (pkcs1Len >> 8), (pkcs1Len & 0xff)]);
-  }
-  const content = new Uint8Array([...version, ...rsaOID, ...wrapper, ...pkcs1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-function convertSEC1toPKCS8(sec1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const ecOID = Uint8Array.from([0x30, 0x13, 0x06, 0x07, 0x2a, 0x86,
-    0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
-    0xce, 0x3d, 0x03, 0x01, 0x07]);
-  const privOctet = Uint8Array.from([0x04, sec1.length]);
-  const content = new Uint8Array([...version, ...ecOID, ...privOctet, ...sec1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-function encodeECDSASignatureToDER(r, s) {
-  const encodeInt = (i) => {
-    let start = 0;
-    while (start < i.length && i[start] === 0) start++;
-    let trimmed = i.slice(start) || Uint8Array.from([0]);
-    if (trimmed[0] & 0x80) {
-      const prefixed = new Uint8Array(trimmed.length + 1);
-      prefixed.set([0], 0);
-      prefixed.set(trimmed, 1);
-      trimmed = prefixed;
-    }
-    const len = trimmed.length;
-    return Uint8Array.from([0x02, len, ...trimmed]);
-  };
-  const rDer = encodeInt(r);
-  const sDer = encodeInt(s);
-  const seqLen = rDer.length + sDer.length;
-  const header = seqLen < 0x80
-    ? Uint8Array.from([0x30, seqLen])
-    : Uint8Array.from([0x30, 0x81, seqLen]);
-  return new Uint8Array([...header, ...rDer, ...sDer]);
-}
-
-async function importPrivateKey(pem) {
-  const raw = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const bin = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertSEC1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false, ['sign']
-    );
-  }
-  if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertPKCS1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
-      false, ['sign']
-    );
-  }
-  const alg = detectKeyType(pem).startsWith('ECDSA')
-    ? { name: 'ECDSA', namedCurve: 'P-256' }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-  return crypto.subtle.importKey(
-    'pkcs8', bin.buffer,
-    alg, false, ['sign']
-  );
-}
-
-async function signMessage(pem, message) {
-  const key = await importPrivateKey(pem);
-  const messageBytes = new TextEncoder().encode(message);
-
-  const algParams = key.algorithm.name === 'ECDSA'
-    ? { name: 'ECDSA', hash: { name: 'SHA-256' } }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-
-  const sigBuffer = await crypto.subtle.sign(algParams, key, messageBytes);
-  const sigBytes = new Uint8Array(sigBuffer);
-
-  if (key.algorithm.name === 'ECDSA') {
-    const half = sigBytes.length / 2;
-    const derSig = encodeECDSASignatureToDER(
-      sigBytes.slice(0, half),
-      sigBytes.slice(half)
-    );
-    return btoa(String.fromCharCode(...derSig));
-  }
-
-  return btoa(String.fromCharCode(...sigBytes));
-}
+import { CA_URL } from '../utils/constants';
+import { signMessage } from '../utils/crypto';
+import { handleFileUpload, downloadTextFile } from '../utils/ui';
+import { makeApiRequest } from '../utils/api';
 
 export default function RenewPage() {
   const [serialNumber, setSerialNumber] = useState('');
   const [privateKey, setPrivateKey] = useState('');
+  const [renewalMessage, setRenewalMessage] = useState('');
   const [isRenewing, setIsRenewing] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [newCertificate, setNewCertificate] = useState('');
+
+  const privateKeyUploader = handleFileUpload(setPrivateKey);
 
   // Check for serial number in URL on page load
   useEffect(() => {
@@ -151,22 +28,19 @@ export default function RenewPage() {
     }
   }, []);
 
-  // Handle private key file upload
-  const handlePrivateKeyUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPrivateKey(e.target.result);
-      };
-      reader.readAsText(file);
+  // Auto-generate renewal message when serial number changes
+  useEffect(() => {
+    if (serialNumber.trim()) {
+      setRenewalMessage(`Renew: ${serialNumber}`);
+    } else {
+      setRenewalMessage('');
     }
-  };
+  }, [serialNumber]);
 
   // Renew certificate
   const renewCertificate = async () => {
-    if (!serialNumber.trim() || !privateKey.trim()) {
-      setError('Please provide a serial number and your private key');
+    if (!serialNumber.trim() || !privateKey.trim() || !renewalMessage.trim()) {
+      setError('Please provide a serial number, your private key, and a renewal message');
       return;
     }
 
@@ -175,34 +49,15 @@ export default function RenewPage() {
     setSuccess(false);
 
     try {
-      // Auto-generate renewal message
-      const renewalMessage = `Renew: ${serialNumber}`;
-      
       // Sign the renewal message
       const signature = await signMessage(privateKey, renewalMessage);
 
       // Send renewal request to CA
-      const response = await fetch(`${CA_URL}/v1/certificate/renew`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serial_number: serialNumber,
-          signature: signature
-        }),
-      });
+      const result = await makeApiRequest(`${CA_URL}/v1/certificate/${serialNumber}/renew`, {
+        signature: signature
+      }, 'POST', true); // expect JSON response
 
-      if (!response.ok) {
-        let errorMessage;
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || JSON.stringify(errorData);
-        } else {
-          errorMessage = await response.text();
-        }
-        throw new Error(errorMessage || `Renewal failed: HTTP ${response.status}`);
-      }
-
+      setNewCertificate(result.certificate);
       setSuccess(true);
       setError('✅ Certificate renewed successfully!');
     } catch (error) {
@@ -213,11 +68,16 @@ export default function RenewPage() {
     }
   };
 
+  // Download certificate using shared utility
+  const downloadCertificate = () => {
+    downloadTextFile(newCertificate, `renewed-certificate-${serialNumber}.pem`, 'application/x-pem-file');
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-2xl mb-4">
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl mb-4">
           <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
@@ -240,35 +100,59 @@ export default function RenewPage() {
       </div>
 
       {success ? (
-        // Success message
+        // Success message with new certificate
         <div className="card p-6">
-          <div className="text-center">
+          <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-2xl mb-4">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <h2 className="text-2xl font-bold text-slate-800 mb-2">Certificate Renewed Successfully</h2>
-            <p className="text-slate-600 mb-6">The certificate has been renewed and a new certificate has been issued</p>
-            <div className="flex gap-4 justify-center">
+            <p className="text-slate-600 mb-6">Your certificate has been renewed with a new validity period</p>
+          </div>
+
+          {/* New Certificate Display */}
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-semibold text-slate-800">New Certificate</h3>
               <button
-                onClick={() => {
-                  setSuccess(false);
-                  setSerialNumber('');
-                  setPrivateKey('');
-                  setError(null);
-                }}
+                onClick={downloadCertificate}
                 className="btn btn-primary"
               >
-                Renew Another Certificate
-              </button>
-              <button
-                onClick={() => window.location.href = '/certs'}
-                className="btn btn-secondary"
-              >
-                View Certificates
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download Certificate
               </button>
             </div>
+            <div className="bg-slate-50 border rounded-lg p-4">
+              <pre className="text-sm font-mono text-slate-700 whitespace-pre-wrap break-all max-h-64 overflow-y-auto">
+                {newCertificate}
+              </pre>
+            </div>
+          </div>
+
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => {
+                setSuccess(false);
+                setSerialNumber('');
+                setPrivateKey('');
+                setRenewalMessage('');
+                setNewCertificate('');
+                setError(null);
+              }}
+              className="btn btn-primary"
+            >
+              Renew Another Certificate
+            </button>
+            <button
+              onClick={() => window.location.href = '/certs'}
+              className="btn btn-secondary"
+            >
+              View Certificates
+            </button>
           </div>
         </div>
       ) : (
@@ -302,15 +186,15 @@ export default function RenewPage() {
               </p>
             </div>
 
-            {/* Show auto-generated message info */}
-            {serialNumber && (
-              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                <label className="text-sm font-medium text-green-800 block mb-2">Auto-generated Message to Sign</label>
-                <p className="text-green-700 font-mono text-sm break-all bg-white p-2 rounded border">
-                  Renew: {serialNumber}
+            {/* Show auto-generated message */}
+            {renewalMessage && (
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <label className="text-sm font-medium text-blue-800 block mb-2">Auto-generated Message to Sign</label>
+                <p className="text-blue-700 font-mono text-sm break-all bg-white p-2 rounded border">
+                  {renewalMessage}
                 </p>
-                <p className="text-xs text-green-600 mt-2">
-                  This message will be automatically signed with your private key to authorize the renewal.
+                <p className="text-xs text-blue-600 mt-2">
+                  This message will be signed with your private key to authorize the renewal.
                 </p>
               </div>
             )}
@@ -323,7 +207,7 @@ export default function RenewPage() {
                   <input
                     type="file"
                     accept=".pem,.key,.txt"
-                    onChange={handlePrivateKeyUpload}
+                    onChange={privateKeyUploader}
                     className="hidden"
                     id="privateKeyFileInput"
                     disabled={isRenewing}
@@ -333,7 +217,7 @@ export default function RenewPage() {
                     className={`btn btn-secondary cursor-pointer ${isRenewing ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1721 9z" />
                     </svg>
                     Upload Private Key
                   </label>
@@ -356,9 +240,9 @@ export default function RenewPage() {
             {/* Submit Button */}
             <button
               onClick={renewCertificate}
-              disabled={isRenewing || !privateKey.trim() || !serialNumber.trim()}
+              disabled={isRenewing || !privateKey.trim() || !renewalMessage.trim() || !serialNumber.trim()}
               className={`btn btn-primary w-full ${
-                isRenewing || !privateKey.trim() || !serialNumber.trim() ? 'opacity-50 cursor-not-allowed' : ''
+                isRenewing || !privateKey.trim() || !renewalMessage.trim() || !serialNumber.trim() ? 'opacity-50 cursor-not-allowed' : ''
               }`}
             >
               {isRenewing ? (

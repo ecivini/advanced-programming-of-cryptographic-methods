@@ -1,5 +1,6 @@
 'use client';
 import React, { useState } from 'react';
+import { CA_URL } from '../utils/constants';
 
 export default function CommitPage() {
   const [email, setEmail] = useState('');
@@ -20,7 +21,7 @@ export default function CommitPage() {
         return;
       }
       
-      const IdUrl = process.env.NEXT_PUBLIC_CA_URL + '/v1/identity';
+      const IdUrl = CA_URL + '/v1/identity';
       const res = await fetch(IdUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
