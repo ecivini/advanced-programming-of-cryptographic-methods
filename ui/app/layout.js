@@ -41,6 +41,12 @@ export default function RootLayout({ children }) {
                 <Link href="/certs" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200">
                   Certificate
                 </Link>
+                <Link href="/revoke" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200">
+                  Revoke
+                </Link>
+                <Link href="/renew" className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all duration-200">
+                  Renew
+                </Link>
               </nav>
             </div>
           </div>

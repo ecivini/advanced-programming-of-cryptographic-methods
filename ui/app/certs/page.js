@@ -4,137 +4,8 @@ import React, { useState } from 'react';
 
 const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
 
-// Import crypto functions from sign page
-function detectKeyType(pem) {
-  const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const byteLen = (b64.length * 3) / 4;
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) return 'ECDSA';
-  if (byteLen > 4000) return 'RSA_4096';
-  if (byteLen > 300) return 'RSA_2048';
-  return 'ECDSA';
-}
-
-function convertPKCS1toPKCS8(pkcs1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const rsaOID = Uint8Array.from([0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86,
-    0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]);
-  const pkcs1Len = pkcs1.length;
-  let wrapper;
-  if (pkcs1Len < 0x80) {
-    wrapper = Uint8Array.from([0x04, pkcs1Len]);
-  } else if (pkcs1Len < 0x100) {
-    wrapper = Uint8Array.from([0x04, 0x81, pkcs1Len]);
-  } else {
-    wrapper = Uint8Array.from([0x04, 0x82, (pkcs1Len >> 8), (pkcs1Len & 0xff)]);
-  }
-  const content = new Uint8Array([...version, ...rsaOID, ...wrapper, ...pkcs1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-function convertSEC1toPKCS8(sec1) {
-  const version = Uint8Array.from([0x02, 0x01, 0x00]);
-  const ecOID = Uint8Array.from([0x30, 0x13, 0x06, 0x07, 0x2a, 0x86,
-    0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
-    0xce, 0x3d, 0x03, 0x01, 0x07]);
-  const privOctet = Uint8Array.from([0x04, sec1.length]);
-  const content = new Uint8Array([...version, ...ecOID, ...privOctet, ...sec1]);
-  const totalLen = content.length;
-  let seq;
-  if (totalLen < 0x80) {
-    seq = Uint8Array.from([0x30, totalLen]);
-  } else if (totalLen < 0x100) {
-    seq = Uint8Array.from([0x30, 0x81, totalLen]);
-  } else {
-    seq = Uint8Array.from([0x30, 0x82, (totalLen >> 8), (totalLen & 0xff)]);
-  }
-  return new Uint8Array([...seq, ...content]);
-}
-
-function encodeECDSASignatureToDER(r, s) {
-  const encodeInt = (i) => {
-    let start = 0;
-    while (start < i.length && i[start] === 0) start++;
-    let trimmed = i.slice(start) || Uint8Array.from([0]);
-    if (trimmed[0] & 0x80) {
-      const prefixed = new Uint8Array(trimmed.length + 1);
-      prefixed.set([0], 0);
-      prefixed.set(trimmed, 1);
-      trimmed = prefixed;
-    }
-    const len = trimmed.length;
-    return Uint8Array.from([0x02, len, ...trimmed]);
-  };
-  const rDer = encodeInt(r);
-  const sDer = encodeInt(s);
-  const seqLen = rDer.length + sDer.length;
-  const header = seqLen < 0x80
-    ? Uint8Array.from([0x30, seqLen])
-    : Uint8Array.from([0x30, 0x81, seqLen]);
-  return new Uint8Array([...header, ...rDer, ...sDer]);
-}
-
-async function importPrivateKey(pem) {
-  const raw = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const bin = Uint8Array.from(atob(raw), c => c.charCodeAt(0));
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertSEC1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false, ['sign']
-    );
-  }
-  if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
-    const pkcs8 = convertPKCS1toPKCS8(bin);
-    return crypto.subtle.importKey(
-      'pkcs8', pkcs8.buffer,
-      { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
-      false, ['sign']
-    );
-  }
-  const alg = detectKeyType(pem).startsWith('ECDSA')
-    ? { name: 'ECDSA', namedCurve: 'P-256' }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-  return crypto.subtle.importKey(
-    'pkcs8', bin.buffer,
-    alg, false, ['sign']
-  );
-}
-
-async function signMessage(pem, message) {
-  const key = await importPrivateKey(pem);
-  const messageBytes = new TextEncoder().encode(message);
-
-  const algParams = key.algorithm.name === 'ECDSA'
-    ? { name: 'ECDSA', hash: { name: 'SHA-256' } }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-
-  const sigBuffer = await crypto.subtle.sign(algParams, key, messageBytes);
-  const sigBytes = new Uint8Array(sigBuffer);
-
-  if (key.algorithm.name === 'ECDSA') {
-    const half = sigBytes.length / 2;
-    const derSig = encodeECDSASignatureToDER(
-      sigBytes.slice(0, half),
-      sigBytes.slice(half)
-    );
-    return btoa(String.fromCharCode(...derSig));
-  }
-
-  return btoa(String.fromCharCode(...sigBytes));
-}
-
-// Parse ASN.1/DER certificate to extract serial number
-function parseSerialNumber(certificatePEM) {
+// Parse ASN.1/DER certificate to extract serial number and validity dates
+function parseCertificateInfo(certificatePEM) {
   try {
     const lines = certificatePEM.split('\n');
     const base64Data = lines
@@ -144,68 +15,135 @@ function parseSerialNumber(certificatePEM) {
     
     const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
     
-    // Simple ASN.1 parsing to find serial number
-    // This is a basic implementation - a full ASN.1 parser would be more robust
+    // Helper function to parse ASN.1 length
+    const parseLength = (data, offset) => {
+      if (data[offset] & 0x80) {
+        const lengthBytes = data[offset] & 0x7f;
+        let length = 0;
+        for (let i = 1; i <= lengthBytes; i++) {
+          length = (length << 8) | data[offset + i];
+        }
+        return { length, nextOffset: offset + lengthBytes + 1 };
+      } else {
+        return { length: data[offset], nextOffset: offset + 1 };
+      }
+    };
+
+    // Helper function to parse ASN.1 time (UTCTime or GeneralizedTime)
+    const parseTime = (data, offset) => {
+      const tag = data[offset];
+      const lengthInfo = parseLength(data, offset + 1);
+      const timeBytes = data.slice(lengthInfo.nextOffset, lengthInfo.nextOffset + lengthInfo.length);
+      const timeString = String.fromCharCode(...timeBytes);
+      
+      let date;
+      if (tag === 0x17) { // UTCTime (YYMMDDHHMMSSZ)
+        const year = parseInt(timeString.substr(0, 2));
+        const fullYear = year >= 50 ? 1900 + year : 2000 + year;
+        const month = parseInt(timeString.substr(2, 2)) - 1;
+        const day = parseInt(timeString.substr(4, 2));
+        const hour = parseInt(timeString.substr(6, 2));
+        const minute = parseInt(timeString.substr(8, 2));
+        const second = parseInt(timeString.substr(10, 2));
+        date = new Date(fullYear, month, day, hour, minute, second);
+      } else if (tag === 0x18) { // GeneralizedTime (YYYYMMDDHHMMSSZ)
+        const year = parseInt(timeString.substr(0, 4));
+        const month = parseInt(timeString.substr(4, 2)) - 1;
+        const day = parseInt(timeString.substr(6, 2));
+        const hour = parseInt(timeString.substr(8, 2));
+        const minute = parseInt(timeString.substr(10, 2));
+        const second = parseInt(timeString.substr(12, 2));
+        date = new Date(year, month, day, hour, minute, second);
+      } else {
+        throw new Error('Unknown time format');
+      }
+      
+      return {
+        date,
+        nextOffset: lengthInfo.nextOffset + lengthInfo.length
+      };
+    };
+
     let offset = 0;
     
     // Skip outer SEQUENCE
     if (binaryData[offset] !== 0x30) throw new Error('Invalid certificate format');
     offset++;
     
-    // Skip length
-    if (binaryData[offset] & 0x80) {
-      const lengthBytes = binaryData[offset] & 0x7f;
-      offset += lengthBytes + 1;
-    } else {
-      offset++;
-    }
+    // Skip outer sequence length
+    const outerLengthInfo = parseLength(binaryData, offset);
+    offset = outerLengthInfo.nextOffset;
     
     // Skip tbsCertificate SEQUENCE
     if (binaryData[offset] !== 0x30) throw new Error('Invalid tbsCertificate format');
     offset++;
     
-    // Skip length
-    if (binaryData[offset] & 0x80) {
-      const lengthBytes = binaryData[offset] & 0x7f;
-      offset += lengthBytes + 1;
-    } else {
-      offset++;
-    }
+    // Skip tbsCertificate length
+    const tbsLengthInfo = parseLength(binaryData, offset);
+    offset = tbsLengthInfo.nextOffset;
     
     // Skip version (optional, context-specific [0])
     if (binaryData[offset] === 0xa0) {
       offset++;
-      // Skip length
-      if (binaryData[offset] & 0x80) {
-        const lengthBytes = binaryData[offset] & 0x7f;
-        offset += lengthBytes + 1;
-      } else {
-        offset++;
-      }
-      // Skip version value
-      offset += 3; // Usually [02 01 02] for version 3
+      const versionLengthInfo = parseLength(binaryData, offset);
+      offset = versionLengthInfo.nextOffset + versionLengthInfo.length;
     }
     
-    // Now we should be at the serial number
+    // Parse serial number
     if (binaryData[offset] !== 0x02) throw new Error('Serial number not found');
     offset++;
     
-    const serialLength = binaryData[offset];
-    offset++;
+    const serialLengthInfo = parseLength(binaryData, offset);
+    offset = serialLengthInfo.nextOffset;
     
-    const serialBytes = binaryData.slice(offset, offset + serialLength);
+    const serialBytes = binaryData.slice(offset, offset + serialLengthInfo.length);
     
-    // Convert to decimal string
+    // Convert serial number to decimal string
     let serialNumber = '';
     for (let i = 0; i < serialBytes.length; i++) {
       if (i === 0 && serialBytes[i] === 0) continue; // Skip leading zero
       serialNumber = (BigInt(serialNumber || '0') * BigInt(256) + BigInt(serialBytes[i])).toString();
     }
     
-    return serialNumber || '0';
+    offset += serialLengthInfo.length;
+    
+    // Skip signature algorithm
+    if (binaryData[offset] !== 0x30) throw new Error('Signature algorithm not found');
+    offset++;
+    const sigAlgLengthInfo = parseLength(binaryData, offset);
+    offset = sigAlgLengthInfo.nextOffset + sigAlgLengthInfo.length;
+    
+    // Skip issuer
+    if (binaryData[offset] !== 0x30) throw new Error('Issuer not found');
+    offset++;
+    const issuerLengthInfo = parseLength(binaryData, offset);
+    offset = issuerLengthInfo.nextOffset + issuerLengthInfo.length;
+    
+    // Parse validity (SEQUENCE of two times)
+    if (binaryData[offset] !== 0x30) throw new Error('Validity not found');
+    offset++;
+    const validityLengthInfo = parseLength(binaryData, offset);
+    offset = validityLengthInfo.nextOffset;
+    
+    // Parse notBefore
+    const notBeforeInfo = parseTime(binaryData, offset);
+    offset = notBeforeInfo.nextOffset;
+    
+    // Parse notAfter
+    const notAfterInfo = parseTime(binaryData, offset);
+    
+    return {
+      serialNumber: serialNumber || '0',
+      notBefore: notBeforeInfo.date,
+      notAfter: notAfterInfo.date
+    };
   } catch (error) {
-    console.warn('Failed to parse serial number:', error);
-    return null;
+    console.warn('Failed to parse certificate info:', error);
+    return {
+      serialNumber: null,
+      notBefore: null,
+      notAfter: null
+    };
   }
 }
 
@@ -214,10 +152,6 @@ export default function CertsPage() {
   const [certificateInfo, setCertificateInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [privateKey, setPrivateKey] = useState('');
-  const [isRevoking, setIsRevoking] = useState(false);
-  const [revocationSuccess, setRevocationSuccess] = useState(false);
-  const [revocationMessage, setRevocationMessage] = useState('');
 
   // Handle file upload for certificate
   const handleFileUpload = (event) => {
@@ -226,18 +160,6 @@ export default function CertsPage() {
       const reader = new FileReader();
       reader.onload = (e) => {
         setCertificatePEM(e.target.result);
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  // Handle private key file upload
-  const handlePrivateKeyUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setPrivateKey(e.target.result);
       };
       reader.readAsText(file);
     }
@@ -281,7 +203,6 @@ export default function CertsPage() {
     setIsLoading(true);
     setError(null);
     setCertificateInfo(null);
-    setRevocationSuccess(false);
 
     try {
       const lines = certificatePEM.split('\n');
@@ -290,7 +211,8 @@ export default function CertsPage() {
         .join('')
         .replace(/\s/g, '');
 
-      const serialNumber = parseSerialNumber(certificatePEM);
+      // Parse certificate details including serial number and validity dates
+      const certInfo = parseCertificateInfo(certificatePEM);
       
       // Check if certificate format is valid
       const hasValidFormat = certificatePEM.includes('-----BEGIN CERTIFICATE-----') && 
@@ -299,9 +221,14 @@ export default function CertsPage() {
       let revocationStatus = { isRevoked: false, revocationDate: null, error: null };
       
       // Only check revocation status if we have a serial number and valid format
-      if (serialNumber && hasValidFormat) {
-        revocationStatus = await checkRevocationStatus(serialNumber);
+      if (certInfo.serialNumber && hasValidFormat) {
+        revocationStatus = await checkRevocationStatus(certInfo.serialNumber);
       }
+
+      // Check if certificate is currently valid (not expired)
+      const now = new Date();
+      const isExpired = certInfo.notAfter && now > certInfo.notAfter;
+      const isNotYetValid = certInfo.notBefore && now < certInfo.notBefore;
 
       const info = {
         format: 'X.509',
@@ -311,11 +238,15 @@ export default function CertsPage() {
         hasBeginMarker: certificatePEM.includes('-----BEGIN CERTIFICATE-----'),
         hasEndMarker: certificatePEM.includes('-----END CERTIFICATE-----'),
         hasValidFormat: hasValidFormat,
-        serialNumber: serialNumber,
+        serialNumber: certInfo.serialNumber,
+        notBefore: certInfo.notBefore,
+        notAfter: certInfo.notAfter,
+        isExpired: isExpired,
+        isNotYetValid: isNotYetValid,
         isRevoked: revocationStatus.isRevoked,
         revocationDate: revocationStatus.revocationDate,
-        // Certificate is valid if it has correct format AND is not revoked
-        isValid: hasValidFormat && !revocationStatus.isRevoked
+        // Certificate is valid if it has correct format AND is not revoked AND is within validity period
+        isValid: hasValidFormat && !revocationStatus.isRevoked && !isExpired && !isNotYetValid
       };
 
       setCertificateInfo(info);
@@ -348,52 +279,6 @@ export default function CertsPage() {
       return serialNumber;
     }
     return `${serialNumber.slice(0, 5)}...${serialNumber.slice(-5)}`;
-  };
-
-  // Revoke certificate
-  const revokeCertificate = async () => {
-    if (!certificateInfo || !certificateInfo.serialNumber || !privateKey.trim() || !revocationMessage.trim()) {
-      setError('Please provide a valid certificate, your private key, and a revocation message');
-      return;
-    }
-
-    setIsRevoking(true);
-    setError(null);
-    setRevocationSuccess(false);
-
-    try {
-      // Sign the revocation message
-      const signature = await signMessage(privateKey, revocationMessage);
-
-      // Send revocation request to CA
-      const response = await fetch(`${CA_URL}/v1/certificate/${certificateInfo.serialNumber}/revoke`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          signature: signature
-        }),
-      });
-
-      if (!response.ok) {
-        let errorMessage;
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const errorData = await response.json();
-          errorMessage = errorData.error || JSON.stringify(errorData);
-        } else {
-          errorMessage = await response.text();
-        }
-        throw new Error(errorMessage || `Revocation failed: HTTP ${response.status}`);
-      }
-
-      setRevocationSuccess(true);
-      setError('✅ Certificate revoked successfully!');
-    } catch (error) {
-      console.error('Certificate revocation error:', error);
-      setError(`❌ Revocation failed: ${error.message}`);
-    } finally {
-      setIsRevoking(false);
-    }
   };
 
   return (
@@ -531,6 +416,16 @@ export default function CertsPage() {
                         <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
                         <span className="text-red-700 text-sm font-medium">Revoked</span>
                       </>
+                    ) : certificateInfo.isExpired ? (
+                      <>
+                        <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
+                        <span className="text-orange-700 text-sm font-medium">Expired</span>
+                      </>
+                    ) : certificateInfo.isNotYetValid ? (
+                      <>
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full mr-2"></div>
+                        <span className="text-yellow-700 text-sm font-medium">Not Yet Valid</span>
+                      </>
                     ) : (
                       <>
                         <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
@@ -541,6 +436,16 @@ export default function CertsPage() {
                   {certificateInfo.isRevoked && certificateInfo.revocationDate && (
                     <p className="text-xs text-slate-500 mt-1">
                       Revoked: {new Date(certificateInfo.revocationDate).toLocaleString()}
+                    </p>
+                  )}
+                  {certificateInfo.isExpired && certificateInfo.notAfter && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Expired: {certificateInfo.notAfter.toLocaleString()}
+                    </p>
+                  )}
+                  {certificateInfo.isNotYetValid && certificateInfo.notBefore && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Valid from: {certificateInfo.notBefore.toLocaleString()}
                     </p>
                   )}
                 </div>
@@ -565,6 +470,82 @@ export default function CertsPage() {
                   <p className="text-slate-800 font-mono text-sm break-all">
                     {formatSerialNumber(certificateInfo.serialNumber)}
                   </p>
+                </div>
+              )}
+
+              {/* Validity Period Display */}
+              {(certificateInfo.notBefore || certificateInfo.notAfter) && (
+                <div className="bg-slate-50 p-4 rounded-lg">
+                  <label className="text-sm font-medium text-slate-600 block mb-3">Validity Period</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {certificateInfo.notBefore && (
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 block mb-1">Valid From </label>
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 text-slate-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-slate-800 text-sm">
+                            {certificateInfo.notBefore.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {certificateInfo.notAfter && (
+                      <div>
+                        <label className="text-xs font-medium text-slate-500 block mb-1">Valid Until </label>
+                        <div className="flex items-center">
+                          <svg className="w-4 h-4 text-slate-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className={`text-sm ${certificateInfo.isExpired ? 'text-red-700 font-medium' : 'text-slate-800'}`}>
+                            {certificateInfo.notAfter.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Validity status indicator */}
+                  {certificateInfo.notBefore && certificateInfo.notAfter && (
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500">Validity Status:</span>
+                        <span className={`font-medium ${
+                          certificateInfo.isExpired ? 'text-red-700' : 
+                          certificateInfo.isNotYetValid ? 'text-yellow-700' : 
+                          'text-green-700'
+                        }`}>
+                          {certificateInfo.isExpired ? 'Expired' : 
+                           certificateInfo.isNotYetValid ? 'Not Yet Valid' : 
+                           'Currently Valid'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Certificate Actions */}
+              {certificateInfo.hasValidFormat && certificateInfo.serialNumber && !certificateInfo.isRevoked && !certificateInfo.isExpired && !certificateInfo.isNotYetValid && (
+                <div className="flex justify-center gap-4">
+                  <button
+                    onClick={() => window.location.href = `/revoke?serial=${certificateInfo.serialNumber}`}
+                    className="btn btn-danger"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Revoke Certificate
+                  </button>
+                  <button
+                    onClick={() => window.location.href = `/renew?serial=${certificateInfo.serialNumber}`}
+                    className="btn btn-primary"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Renew Certificate
+                  </button>
                 </div>
               )}
 
@@ -601,171 +582,6 @@ export default function CertsPage() {
           )}
         </div>
       </div>
-
-      {/* Certificate Revocation Section */}
-      {certificateInfo && certificateInfo.hasValidFormat && certificateInfo.serialNumber && !revocationSuccess && (
-        <div className="card p-6">
-          {certificateInfo.isRevoked ? (
-            // Certificate is already revoked - show info message
-            <div className="text-center py-8">
-              <div className="inline-flex items-center justify-center w-12 h-12 bg-red-100 rounded-2xl mb-4">
-                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-bold text-slate-800 mb-2">Certificate Already Revoked</h2>
-              <p className="text-slate-600 mb-1">This certificate has already been revoked by the Certificate Authority.</p>
-              {certificateInfo.revocationDate && (
-                <p className="text-sm text-slate-500">
-                  Revocation Date: {new Date(certificateInfo.revocationDate).toLocaleString()}
-                </p>
-              )}
-            </div>
-          ) : (
-            // Show revocation form for active certificates
-            <>
-              <div className="text-center mb-6">
-                <div className="inline-flex items-center justify-center w-10 h-10 bg-gradient-to-r from-red-500 to-red-600 rounded-2xl mb-4">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.728-.833-2.498 0L4.316 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold text-slate-800 mb-2">Revoke Certificate</h2>
-                <p className="text-slate-600">Sign a message to revoke this certificate from the Certificate Authority</p>
-              </div>
-
-          <div className="max-w-2xl mx-auto space-y-6">
-            <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <p className="text-sm text-red-700 mb-2">
-                    <strong>Quick Revocation Helper</strong>
-                  </p>
-                  <p className="text-sm text-red-700 mb-3">
-                    To revoke this certificate click the button to auto-populate the message field.
-                    You can then sign the message with your private key."
-                  </p>
-                </div>
-                <button
-                  onClick={() => setRevocationMessage(`Revoke: ${certificateInfo.serialNumber}`)}
-                  className="btn btn-secondary text-xs ml-4 flex-shrink-0"
-                  title="Auto-populate revocation message"
-                >
-                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Auto-fill Message
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="label">Message to Sign</label>
-              <textarea
-                rows={3}
-                className="input font-mono resize-none"
-                placeholder="Revoke: "
-                value={revocationMessage}
-                onChange={(e) => setRevocationMessage(e.target.value)}
-                disabled={isRevoking}
-              />
-              <p className="text-sm text-slate-500 mt-2">
-                Enter the message to sign. Format: "Revoke: &lt;serial_number&gt;" (copy the serial number from above)
-              </p>
-            </div>
-
-            <div>
-              <label className="label">Private Key (PEM format)</label>
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    type="file"
-                    accept=".pem,.key,.txt"
-                    onChange={handlePrivateKeyUpload}
-                    className="hidden"
-                    id="privateKeyFileInput"
-                    disabled={isRevoking}
-                  />
-                  <label
-                    htmlFor="privateKeyFileInput"
-                    className={`btn btn-secondary cursor-pointer ${isRevoking ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                    </svg>
-                    Upload Private Key
-                  </label>
-                  <span className="text-sm text-slate-500 self-center">or paste below</span>
-                </div>
-                <textarea
-                  rows={6}
-                  className="input font-mono resize-none"
-                  placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-                  value={privateKey}
-                  onChange={(e) => setPrivateKey(e.target.value)}
-                  disabled={isRevoking}
-                />
-              </div>
-              <p className="text-sm text-slate-500 mt-2">
-                Your private key (PKCS#8, PKCS#1, or SEC1 format). Supports RSA and ECDSA keys.
-              </p>
-            </div>
-            
-            <button
-              onClick={revokeCertificate}
-              disabled={isRevoking || !privateKey.trim() || !revocationMessage.trim()}
-              className={`btn btn-danger w-full ${
-                isRevoking || !privateKey.trim() || !revocationMessage.trim() ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              {isRevoking ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Revoking Certificate...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                  Sign Message & Revoke Certificate
-                </>
-              )}
-            </button>
-          </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Success message for revocation */}
-      {revocationSuccess && (
-        <div className="card p-6">
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-r from-green-500 to-green-600 rounded-2xl mb-4">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Certificate Revoked Successfully</h2>
-            <p className="text-slate-600">The certificate has been revoked and added to the Certificate Revocation List (CRL)</p>
-            <div className="mt-6">
-              <button
-                onClick={() => {
-                  setRevocationSuccess(false);
-                  setCertificateInfo(null);
-                  setCertificatePEM('');
-                  setPrivateKey('');
-                  setRevocationMessage('');
-                }}
-                className="btn btn-primary"
-              >
-                Revoke Another Certificate
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
