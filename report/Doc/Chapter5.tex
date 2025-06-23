@@ -29,7 +29,7 @@ This chapter provides a comprehensive analysis of the known limitations of the i
     \item Certificate policy extensions
     \item Authority Information Access (AIA) extensions
     \item Subject Alternative Names (SAN) for multiple identities
-    \item Key usage constraints and extended key usage
+    \item Key usage constraints and extended key usage ({\color{red}{TODO: Check}})
     \item Certificate transparency integration
     \item Custom extension fields for specific use cases
 \end{itemize}
@@ -74,31 +74,13 @@ This chapter provides a comprehensive analysis of the known limitations of the i
 
 \textbf{Mitigation:} Future versions should support intermediate CAs and configurable trust hierarchies to match real-world deployment scenarios.
 
-\subsection{Limited Audit and Compliance Features}
-
-\textbf{Limitation:} The current implementation lacks comprehensive audit logging and compliance features required for regulatory environments.
-
-\textbf{Description:} Missing audit capabilities include:
-\begin{itemize}
-    \item Tamper-evident audit logs
-    \item Real-time security monitoring
-    \item Compliance reporting for standards like Common Criteria
-    \item Detailed forensic logging capabilities
-    \item Integration with Security Information and Event Management (SIEM) systems
-\end{itemize}
-
-\textbf{Impact:} The system may not meet regulatory requirements for financial, healthcare, or government applications that mandate specific audit and compliance standards.
-
-\textbf{Mitigation:} Enhanced logging and monitoring capabilities should be implemented to support compliance with relevant standards and regulations.
-
 \subsection{Key Management Limitations}
 
 \textbf{Limitation:} While HSM integration provides secure key storage, the system lacks advanced key management features found in enterprise solutions.
 
-\textbf{Description:} Current key management limitations include:
+\textbf{Description:} Current key management limitations include: ({\color{red}{TODO: Check}})
 \begin{itemize}
-    \item No automatic key rotation policies
-    \item Limited key backup and recovery procedures
+    \item No automatic key rotation policies 
     \item No support for key escrow or split knowledge
     \item Absence of hardware attestation mechanisms
     \item Limited integration with external key management systems
@@ -120,7 +102,6 @@ This chapter provides a comprehensive analysis of the known limitations of the i
     \item Limited optimization for high-throughput certificate operations
     \item No built-in caching mechanisms for frequently accessed data
     \item Absence of read replicas for load distribution
-    \item Lack of automated database maintenance procedures
 \end{itemize}
 
 \textbf{Impact:} Performance may degrade significantly under high load, potentially affecting service availability and response times.
@@ -131,7 +112,7 @@ This chapter provides a comprehensive analysis of the known limitations of the i
 
 \textbf{Limitation:} Cloud HSM operations introduce latency that may limit certificate issuance throughput.
 
-\textbf{Description:} HSM-related performance limitations include:
+\textbf{Description:} HSM-related performance limitations include: ({\color{red}{TODO: Check}})
 \begin{itemize}
     \item Network latency for each signing operation
     \item Limited concurrent HSM operations
@@ -145,23 +126,6 @@ This chapter provides a comprehensive analysis of the known limitations of the i
 \textbf{Mitigation:} Implementation of operation batching, local caching where appropriate, and HSM capacity planning would improve performance.
 
 \section{Operational Limitations}
-
-\subsection{Monitoring and Alerting}
-
-\textbf{Limitation:} The system lacks comprehensive monitoring and alerting capabilities required for production operations.
-
-\textbf{Description:} Missing operational features include:
-\begin{itemize}
-    \item Real-time system health monitoring
-    \item Automated alerting for security events
-    \item Performance metrics collection and analysis
-    \item Capacity planning and forecasting tools
-    \item Integration with enterprise monitoring solutions
-\end{itemize}
-
-\textbf{Impact:} Operations teams may not have sufficient visibility into system health and performance, potentially leading to delayed incident response.
-
-\textbf{Mitigation:} Implementation of comprehensive monitoring infrastructure and operational dashboards would improve system observability.
 
 \subsection{Backup and Disaster Recovery}
 
@@ -200,31 +164,13 @@ This chapter provides a comprehensive analysis of the known limitations of the i
 
 \textbf{Mitigation:} UI enhancement with advanced features and improved user experience design would increase system adoption and efficiency.
 
-\subsection{API Limitations}
-
-\textbf{Limitation:} The REST API provides core functionality but lacks advanced features required for enterprise integration.
-
-\textbf{Description:} API limitations include:
-\begin{itemize}
-    \item Basic CRUD operations without advanced query capabilities
-    \item No pagination for large result sets
-    \item Limited error handling and status reporting
-    \item Absence of webhook support for event notifications
-    \item No API versioning strategy
-    \item Limited documentation and SDK support
-\end{itemize}
-
-\textbf{Impact:} Integration with external systems may be challenging, and the API may not scale to meet enterprise application requirements.
-
-\textbf{Mitigation:} API enhancement with advanced features, comprehensive documentation, and SDK development would improve integration capabilities.
-
 \section{Compliance and Standards Limitations}
 
 \subsection{Standards Compliance}
 
 \textbf{Limitation:} While the system implements basic X.509 standards, it lacks full compliance with advanced PKI standards and best practices.
 
-\textbf{Description:} Standards compliance gaps include:
+\textbf{Description:} Standards compliance gaps include: ({\color{red}{TODO: Check}})
 \begin{itemize}
     \item Partial RFC 5280 compliance
     \item No Common Criteria evaluation
