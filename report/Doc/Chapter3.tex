@@ -30,7 +30,7 @@ The architecture follows a layered approach with clear separation of concerns:
     
     \item \textbf{Business Logic Layer}: The CA server implements all PKI business logic, including certificate lifecycle management, validation rules, and identity verification processes.
     
-    \item \textbf{Data Persistence Layer}: MongoDB provides reliable storage for certificates, CRL entries, and operational logs with support for complex queries and indexing.
+    \item \textbf{Data Persistence Layer}: MongoDB provides reliable storage for certificates, CRL entries, and operational logs.
     
     \item \textbf{Security Layer}: HSM integration ensures that all cryptographic operations involving the CA's private key are performed within secure hardware boundaries.
 \end{itemize}
@@ -44,9 +44,6 @@ The security architecture implements defense-in-depth principles:
     
     \item \textbf{Authentication Mechanisms}: Multi-layered authentication including email verification and private key ownership proof.
     
-    \item \textbf{Secure Communications}: All inter-component communications use encrypted channels with proper certificate validation.
-    
-    \item \textbf{Data Protection}: Database encryption and access controls protect stored certificate information and audit logs.
 \end{itemize}
 
 \subsection{Deployment Architecture}
@@ -68,25 +65,25 @@ This section details the technical implementation aspects, including programming
 
 \textbf{Programming Language}: Go (Golang) 1.21+
 
-\textbf{Justification}: Go was chosen for the backend implementation due to its excellent performance characteristics, strong standard library for cryptographic operations, robust concurrency support, and extensive ecosystem for web service development.
+\textbf{Justification}: Go was chosen for the backend implementation due to its performance characteristics, strong standard library for cryptographic operations, robust concurrency support, and extensive ecosystem for web service development.
 
 \textbf{Key Libraries and Frameworks}:
 
 \begin{itemize}
-    \item \textbf{Gorilla Mux}: HTTP router and URL matcher for building REST APIs with support for middleware and route variables.
+    \item \textbf{Go net/http}: HTTP router and URL matcher for building REST APIs with support for middleware and route variables.
     
-    \item \textbf{MongoDB Driver}: Official Go driver for MongoDB (go.mongodb.org/mongo-driver/v2) providing high-performance database operations with built-in connection pooling.
+    \item \textbf{MongoDB Driver}: Official \href{go.mongodb.org/mongo-driver/v2}{Go driver for MongoDB} providing high-performance database operations with built-in connection pooling.
     
     \item \textbf{AWS SDK for Go}: Integration with AWS KMS for HSM operations, providing secure key management and cryptographic operations.
     
     \item \textbf{Go Standard Crypto Libraries}: Extensive use of crypto/x509, crypto/rsa, crypto/ecdsa, and crypto/rand for certificate operations and cryptographic functions.
     
-    \item \textbf{SMTP Libraries}: Email verification and notification capabilities using Go's net/smtp package and third-party extensions.
+    \item \textbf{Email}: Email verification and notification capabilities using Go's Resend package.
 \end{itemize}
 
 \subsection{Frontend Implementation}
 
-\textbf{Framework}: Next.js 15.3.2 with React 19.0.0
+\textbf{Framework}: Next.js 15 with React 19
 
 \textbf{Justification}: Next.js provides server-side rendering capabilities, excellent developer experience, and robust production optimizations. React's component-based architecture enables maintainable and reusable UI components.
 
@@ -113,8 +110,6 @@ This section details the technical implementation aspects, including programming
 \begin{itemize}
     \item \textbf{Document Storage}: Flexible schema for certificate metadata, CRL entries, and audit logs
     \item \textbf{Indexing}: Optimized queries for certificate serial numbers, email addresses, and revocation status
-    \item \textbf{Aggregation Pipeline}: Complex queries for certificate statistics and reporting
-    \item \textbf{GridFS}: Large file storage for certificate and key material when needed
 \end{itemize}
 
 \subsection{HSM Integration}
@@ -176,15 +171,15 @@ The backend follows Go's standard project layout with clear separation of concer
 \subsubsection{Internal Packages (internal/)}
 
 \begin{itemize}
-    \item \textbf{internal/config/config.go}: Centralized configuration management using environment variables. Handles database connections, HSM credentials, email settings, and server parameters.
+    \item \textbf{internal/config/config.go}: Centralized configuration management using environment variables. Handles HSM and server parameters.
     
     \item \textbf{internal/db/}: Database abstraction layer
     \begin{itemize}
         \item \textbf{db.go}: Database connection management and initialization
-        \item \textbf{models.go}: Data models for certificates, CRL entries, and audit logs
+        \item \textbf{models.go}: Data models for certificates, CRL entries, and logs
     \end{itemize}
     
-    \item \textbf{internal/email/email.go}: Email service implementation for identity verification and notifications. Supports SMTP configuration and template-based email generation.
+    \item \textbf{internal/email/email.go}: Email service implementation for identity verification and notifications.
     
     \item \textbf{internal/hsm/hsm.go}: Hardware Security Module integration layer. Provides abstraction over AWS KMS operations including key creation, signing, and key management.
     
@@ -262,9 +257,7 @@ The frontend follows Next.js 13+ app directory structure with modern React patte
 \subsubsection{Development Certificates (dev-certs/)}
 
 \begin{itemize}
-    \item \textbf{dev-ca.key/dev-ca.pem}: Development CA key pair for testing
-    \item \textbf{mongodb.*}: MongoDB SSL certificates for secure database connections
-    \item \textbf{root.pem}: Root certificate for development trust chain
+    \item \textbf{root.pem}: CA root certificate for the trust chain. It is generated during the initial setup.
 \end{itemize}
 
 \subsubsection{Container Orchestration}
