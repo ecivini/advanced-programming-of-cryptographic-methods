@@ -11,7 +11,7 @@ This chapter provides comprehensive instructions for installing, configuring, an
     \item CPU: 2 cores
     \item RAM: 4 GB
     \item Storage: 10 GB free disk space
-    \item Network: Internet connection for Docker image downloads
+    \item Network: Stable broadband internet connection 
 \end{itemize}
 
 \textbf{Recommended Requirements:}
@@ -32,13 +32,6 @@ The following software must be installed on the target system:
     \item \textbf{Docker Engine}: Version 20.10 or higher
     \item \textbf{Docker Compose}: Version 2.0 or higher
     \item \textbf{Git}: Version 2.30 or higher (for source code retrieval)
-\end{itemize}
-
-\textbf{Optional but Recommended:}
-\begin{itemize}
-    \item \textbf{Make}: For simplified command execution
-    \item \textbf{curl}: For API testing and verification
-    \item \textbf{jq}: For JSON response formatting during testing
 \end{itemize}
 
 \section{Installation Instructions}
@@ -147,17 +140,6 @@ RESEND_FROM=noreply@yourdomain.com
 If using different email service, modify the email configuration in:
 \texttt{ca/internal/email/email.go}
 
-\subsection{SSL/TLS Certificates (Development)}
-
-The project includes development certificates in the \texttt{dev-certs/} directory:
-\begin{itemize}
-    \item \texttt{dev-ca.key/dev-ca.pem}: Development CA key pair
-    \item \texttt{mongodb.*}: MongoDB SSL certificates
-    \item \texttt{root.pem}: Root certificate for development
-\end{itemize}
-
-\textbf{For Production:} Replace development certificates with properly issued certificates from a trusted CA.
-
 \section{System Execution}
 
 \subsection{Starting the Complete System}
@@ -204,9 +186,6 @@ curl http://localhost:5000/v1/health
 
 # Frontend accessibility
 curl http://localhost:3000
-
-# KMS service check
-curl http://localhost:8080
 \end{verbatim}
 
 \subsection{First-Time Setup}
@@ -260,9 +239,12 @@ docker compose up --build
 \textbf{Key Endpoints:}
 \begin{itemize}
     \item \texttt{GET /v1/health} - System health status
-    \item \texttt{GET /v1/info} - CA information and public key
-    \item \texttt{POST /v1/certificate/sign} - Certificate signing requests
-    \item \texttt{POST /v1/certificate/revoke} - Certificate revocation
+    \item \texttt{GET /v1/info/pk} - CA information and public key
+    \item \texttt{PUT /v1/identity} - Commit identity information (email and public key)
+    \item \texttt{PUT /v1/certificate} - Verify proof of identity and generate certificate
+    \item \texttt{GET /v1/certificate/:serial/status} - Get the status of a certificate'
+    \item \texttt{POST /v1/certificate/:serial/renew} -Renew an existing certificate
+    \item \texttt{POST /v1/certificate/:serial/revoke} - Revoke an existing certificate
     \item \texttt{GET /v1/crl} - Certificate revocation list
 \end{itemize}
 
