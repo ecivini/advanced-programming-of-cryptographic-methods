@@ -24,12 +24,21 @@ var SupportedKeyTypes = []string{
 type CertificateHandler struct {
 	repo         CertificateRepository
 	emailService *email.EmailService
+	// Add components for signed responses and replay protection
+	responseSigner *ResponseSigner
+	nonceManager   *NonceManager
 }
 
 func BuildCertificateHandler(repo CertificateRepository, email *email.EmailService) CertificateHandler {
+	// Initialize response signer and nonce manager
+	responseSigner := NewResponseSigner(repo.hsm, "ca.example.com")
+	nonceManager := NewNonceManager()
+
 	return CertificateHandler{
-		repo:         repo,
-		emailService: email,
+		repo:           repo,
+		emailService:   email,
+		responseSigner: responseSigner,
+		nonceManager:   nonceManager,
 	}
 }
 
@@ -285,25 +294,115 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 }
 
 func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, r *http.Request) {
+	// Handle both GET (legacy) and POST (with nonce) requests
+	var request StatusRequest
+
 	serial := r.PathValue("serial")
 	if serial == "" {
 		handlers.ReturnErroredResponse("Serial number is required", &w, http.StatusBadRequest)
 		return
 	}
 
+	// Check if this is a POST request with nonce
+	if r.Method == "POST" {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			handlers.ReturnErroredResponse("Invalid request format", &w, http.StatusBadRequest)
+			return
+		}
+
+		// Validate nonce and timestamp for replay protection
+		if request.Nonce != "" {
+			if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
+				handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
+				return
+			}
+		}
+
+		// Ensure serial number matches
+		if request.SerialNumber != "" && request.SerialNumber != serial {
+			handlers.ReturnErroredResponse("Serial number mismatch", &w, http.StatusBadRequest)
+			return
+		}
+	} else {
+		// GET request - generate a server-side nonce for the response
+		nonce, err := GenerateNonce()
+		if err != nil {
+			handlers.ReturnErroredResponse("Failed to generate nonce", &w, http.StatusInternalServerError)
+			return
+		}
+		request = StatusRequest{
+			SerialNumber: serial,
+			Nonce:        nonce,
+			Timestamp:    time.Now(),
+		}
+	}
+
+	// Get certificate data
 	data := h.repo.GetStatusFromSerialNumber(serial)
 	if data == nil {
-		handlers.ReturnErroredResponse("Certificate not found", &w, http.StatusNotFound)
+		// Create unknown status response
+		responseData := &StatusResponseData{
+			SerialNumber: serial,
+			CertStatus:   StatusUnknown,
+			ThisUpdate:   time.Now(),
+			Nonce:        request.Nonce,
+		}
+
+		signedResponse, err := h.responseSigner.SignStatusResponse(responseData)
+		if err != nil {
+			handlers.ReturnErroredResponse("Failed to sign response", &w, http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(signedResponse)
 		return
 	}
-	response := map[string]bool{
-		"revoked": data.Revoked,
+
+	// Determine certificate status
+	var certStatus int
+	var revocationTime *time.Time
+
+	if data.Revoked {
+		certStatus = StatusRevoked
+		revTime := data.RevocationDate.Time()
+		revocationTime = &revTime
+	} else {
+		certStatus = StatusGood
 	}
+
+	// Create response data
+	nextUpdate := time.Now().Add(time.Hour * 24) // Next update in 24 hours
+	responseData := &StatusResponseData{
+		SerialNumber:     serial,
+		CertStatus:       certStatus,
+		ThisUpdate:       time.Now(),
+		NextUpdate:       &nextUpdate,
+		RevocationTime:   revocationTime,
+		RevocationReason: nil, // Could be extended to include reason codes
+		Nonce:            request.Nonce,
+	}
+
+	// Sign the response
+	signedResponse, err := h.responseSigner.SignStatusResponse(responseData)
+	if err != nil {
+		fmt.Printf("[-] Failed to sign status response: %v\n", err)
+		handlers.ReturnErroredResponse("Failed to sign response", &w, http.StatusInternalServerError)
+		return
+	}
+
+	// Return signed response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(signedResponse)
 }
 
 func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *http.Request) {
+	// Handle both GET and POST requests (POST allows nonce for replay protection)
+	var requestNonce string
+
+	// Parse pagination parameters
 	page, err := strconv.Atoi(r.URL.Query().Get("page"))
 	if err != nil || page < 1 {
 		handlers.ReturnErroredResponse("Invalid page parameter", &w, http.StatusBadRequest)
@@ -316,19 +415,82 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		return
 	}
 
+	// Handle POST request with nonce for replay protection
+	if r.Method == "POST" {
+		var request struct {
+			Nonce     string    `json:"nonce"`
+			Timestamp time.Time `json:"timestamp"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			handlers.ReturnErroredResponse("Invalid request format", &w, http.StatusBadRequest)
+			return
+		}
+
+		// Validate nonce and timestamp
+		if request.Nonce != "" {
+			if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
+				handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
+				return
+			}
+		}
+
+		requestNonce = request.Nonce
+	} else {
+		// GET request - generate server-side nonce
+		nonce, err := GenerateNonce()
+		if err != nil {
+			handlers.ReturnErroredResponse("Failed to generate nonce", &w, http.StatusInternalServerError)
+			return
+		}
+		requestNonce = nonce
+	}
+
+	// Get revoked certificates
 	revokedCertificates, err := h.repo.GetRevokedCertificates(page, pageSize)
 	if err != nil {
 		fmt.Println("[-] Failed to retrieve revocation list:", err)
 		handlers.ReturnErroredResponse("Failed to retrieve revocation list", &w, http.StatusInternalServerError)
 		return
 	}
-	response := make([]map[string]string, len(revokedCertificates))
+
+	// Get total count for pagination (this would need to be implemented in the repository)
+	totalCount := len(revokedCertificates) // Simplified - in reality, you'd query the total count
+
+	// Convert to response format
+	revokedCertInfos := make([]RevokedCertInfo, len(revokedCertificates))
 	for i, cert := range revokedCertificates {
-		response[i] = map[string]string{
-			"serial_number":   cert.SerialNumber,
-			"revocation_date": cert.RevocationDate.Time().Format(time.RFC3339),
+		revokedCertInfos[i] = RevokedCertInfo{
+			SerialNumber:   cert.SerialNumber,
+			RevocationDate: cert.RevocationDate.Time(),
+			// RevocationReason could be added here if stored in the database
 		}
 	}
+
+	// Create response data
+	now := time.Now()
+	nextUpdate := now.Add(time.Hour * 6) // Update every 6 hours
+
+	responseData := &RevocationListData{
+		RevokedCertificates: revokedCertInfos,
+		ThisUpdate:          now,
+		NextUpdate:          nextUpdate,
+		Page:                page,
+		PageSize:            pageSize,
+		TotalCount:          totalCount,
+		Nonce:               requestNonce,
+	}
+
+	// Sign the response
+	signedResponse, err := h.responseSigner.SignRevocationListResponse(responseData)
+	if err != nil {
+		fmt.Printf("[-] Failed to sign revocation list response: %v\n", err)
+		handlers.ReturnErroredResponse("Failed to sign response", &w, http.StatusInternalServerError)
+		return
+	}
+
+	// Return signed response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(signedResponse)
 }
