@@ -307,11 +307,9 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 	}
 
 	// Validate nonce and timestamp for replay protection
-	if request.Nonce != "" {
-		if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
-			handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
-			return
-		}
+	if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
+		handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
+		return
 	}
 
 	// Get certificate data
@@ -377,9 +375,6 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 }
 
 func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *http.Request) {
-	// Handle both GET and POST requests (POST allows nonce for replay protection)
-	var requestNonce string
-
 	// Parse pagination parameters
 	page, err := strconv.Atoi(r.URL.Query().Get("page"))
 	if err != nil || page < 1 {
@@ -393,35 +388,23 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	// Handle POST request with nonce for replay protection
-	if r.Method == "POST" {
-		var request struct {
-			Nonce     string    `json:"nonce"`
-			Timestamp time.Time `json:"timestamp"`
-		}
+	nonce, err := strconv.Atoi(r.URL.Query().Get("nonce"))
+	if err != nil || nonce < 1 {
+		handlers.ReturnErroredResponse("Invalid nonce parameter", &w, http.StatusBadRequest)
+		return
+	}
 
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			handlers.ReturnErroredResponse("Invalid request format", &w, http.StatusBadRequest)
-			return
-		}
+	timestampRaw := r.URL.Query().Get("timestamp")
+	timestamp, err := time.Parse(time.RFC3339, timestampRaw)
+	if err != nil {
+		handlers.ReturnErroredResponse("Invalid timestamp parameter", &w, http.StatusBadRequest)
+		return
+	}
 
-		// Validate nonce and timestamp
-		if request.Nonce != "" {
-			if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
-				handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
-				return
-			}
-		}
-
-		requestNonce = request.Nonce
-	} else {
-		// GET request - generate server-side nonce
-		nonce, err := GenerateNonce()
-		if err != nil {
-			handlers.ReturnErroredResponse("Failed to generate nonce", &w, http.StatusInternalServerError)
-			return
-		}
-		requestNonce = nonce
+	// Validate nonce and timestamp
+	if err := h.nonceManager.ValidateAndUseNonce(nonce, timestamp); err != nil {
+		handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
+		return
 	}
 
 	// Get revoked certificates
@@ -432,8 +415,7 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		return
 	}
 
-	// Get total count for pagination (this would need to be implemented in the repository)
-	totalCount := len(revokedCertificates) // Simplified - in reality, you'd query the total count
+	totalCount := len(revokedCertificates)
 
 	// Convert to response format
 	revokedCertInfos := make([]RevokedCertInfo, len(revokedCertificates))
@@ -441,13 +423,13 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		revokedCertInfos[i] = RevokedCertInfo{
 			SerialNumber:   cert.SerialNumber,
 			RevocationDate: cert.RevocationDate.Time(),
-			// RevocationReason could be added here if stored in the database
+			// TODO: add RevocationReason
 		}
 	}
 
 	// Create response data
 	now := time.Now()
-	nextUpdate := now.Add(time.Hour * 6) // Update every 6 hours
+	nextUpdate := now // CRL is real-time, so next update is immediate
 
 	responseData := &RevocationListData{
 		RevokedCertificates: revokedCertInfos,
@@ -456,7 +438,7 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		Page:                page,
 		PageSize:            pageSize,
 		TotalCount:          totalCount,
-		Nonce:               requestNonce,
+		Nonce:               nonce,
 	}
 
 	// Sign the response

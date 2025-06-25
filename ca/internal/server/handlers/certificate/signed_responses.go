@@ -53,7 +53,7 @@ type StatusResponseData struct {
 	// Revocation reason (only if revoked)
 	RevocationReason *int `json:"revocation_reason,omitempty"`
 	// Nonce from request (replay protection)
-	Nonce string `json:"nonce"`
+	Nonce int `json:"nonce"`
 	// Responder ID
 	ResponderID string `json:"responder_id"`
 }
@@ -62,7 +62,7 @@ type StatusResponseData struct {
 type StatusRequest struct {
 	SerialNumber string `json:"serial_number"`
 	// Nonce for replay protection (base64 encoded)
-	Nonce string `json:"nonce"`
+	Nonce int `json:"nonce"`
 	// Timestamp of request (additional replay protection)
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -87,7 +87,7 @@ type RevocationListData struct {
 	PageSize   int `json:"page_size"`
 	TotalCount int `json:"total_count"`
 	// Nonce from request
-	Nonce string `json:"nonce"`
+	Nonce int `json:"nonce"`
 	// Responder ID
 	ResponderID string `json:"responder_id"`
 }
@@ -101,26 +101,26 @@ type RevokedCertInfo struct {
 // Nonce manager for replay protection
 type NonceManager struct {
 	// In production, this should be a distributed cache (Redis, etc.)
-	usedNonces map[string]time.Time
+	usedNonces map[int]time.Time
 	// Maximum age for nonces (after this, they're removed from cache)
 	maxAge time.Duration
 }
 
 func NewNonceManager() *NonceManager {
 	return &NonceManager{
-		usedNonces: make(map[string]time.Time),
+		usedNonces: make(map[int]time.Time),
 		maxAge:     time.Minute * 10, // Nonces valid for 10 minutes
 	}
 }
 
 // Validate nonce and mark as used
-func (nm *NonceManager) ValidateAndUseNonce(nonce string, requestTime time.Time) error {
+func (nm *NonceManager) ValidateAndUseNonce(nonce int, requestTime time.Time) error {
 	// Clean up old nonces first
 	nm.cleanup()
 
 	// Check if nonce was already used
 	if _, exists := nm.usedNonces[nonce]; exists {
-		return fmt.Errorf("nonce already used (replay attack detected)")
+		return fmt.Errorf("nonce already used")
 	}
 
 	// Check if request is too old
@@ -129,8 +129,8 @@ func (nm *NonceManager) ValidateAndUseNonce(nonce string, requestTime time.Time)
 	}
 
 	// Check if request is from the future (clock skew protection)
-	if requestTime.After(time.Now().Add(time.Minute * 5)) {
-		return fmt.Errorf("request from future (clock skew detected)")
+	if requestTime.After(time.Now().Add(time.Minute * 2)) {
+		return fmt.Errorf("request from future")
 	}
 
 	// Mark nonce as used

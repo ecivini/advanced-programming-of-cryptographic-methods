@@ -35,7 +35,6 @@ func InitServer(hsm *hsm.Hsm, db *mongo.Client, emailService *email.EmailService
 	mux.HandleFunc("POST /v1/certificate/{serial}/renew", certificateHandler.RenewCertificateHandler)
 	// Support both GET and POST for revocation list
 	mux.HandleFunc("GET /v1/crl", certificateHandler.GetRevocationListHandler)
-	mux.HandleFunc("POST /v1/crl", certificateHandler.GetRevocationListHandler)
 
 	infoHandler := handlers.BuildInfoHandler(hsm)
 	mux.HandleFunc("GET /v1/info/pk", infoHandler.GetRootPublicKeyHandler)
