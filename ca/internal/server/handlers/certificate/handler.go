@@ -294,50 +294,23 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 }
 
 func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, r *http.Request) {
-	// Handle both GET (legacy) and POST (with nonce) requests
 	var request StatusRequest
 
-	serial := r.PathValue("serial")
-	if serial == "" {
-		handlers.ReturnErroredResponse("Serial number is required", &w, http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		handlers.ReturnErroredResponse("Invalid request format", &w, http.StatusBadRequest)
 		return
 	}
 
-	// Check if this is a POST request with nonce
-	if r.Method == "POST" {
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			handlers.ReturnErroredResponse("Invalid request format", &w, http.StatusBadRequest)
+	// Validate nonce and timestamp for replay protection
+	if request.Nonce != "" {
+		if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
+			handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
 			return
-		}
-
-		// Validate nonce and timestamp for replay protection
-		if request.Nonce != "" {
-			if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
-				handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
-				return
-			}
-		}
-
-		// Ensure serial number matches
-		if request.SerialNumber != "" && request.SerialNumber != serial {
-			handlers.ReturnErroredResponse("Serial number mismatch", &w, http.StatusBadRequest)
-			return
-		}
-	} else {
-		// GET request - generate a server-side nonce for the response
-		nonce, err := GenerateNonce()
-		if err != nil {
-			handlers.ReturnErroredResponse("Failed to generate nonce", &w, http.StatusInternalServerError)
-			return
-		}
-		request = StatusRequest{
-			SerialNumber: serial,
-			Nonce:        nonce,
-			Timestamp:    time.Now(),
 		}
 	}
 
 	// Get certificate data
+	serial := request.SerialNumber
 	data := h.repo.GetStatusFromSerialNumber(serial)
 	if data == nil {
 		// Create unknown status response
@@ -361,7 +334,7 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 	}
 
 	// Determine certificate status
-	var certStatus int
+	var certStatus string
 	var revocationTime *time.Time
 
 	if data.Revoked {
@@ -373,7 +346,7 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 	}
 
 	// Create response data
-	nextUpdate := time.Now().Add(time.Hour * 24) // Next update in 24 hours
+	nextUpdate := time.Now() // Next update is immediate as it is in real time
 	responseData := &StatusResponseData{
 		SerialNumber:     serial,
 		CertStatus:       certStatus,

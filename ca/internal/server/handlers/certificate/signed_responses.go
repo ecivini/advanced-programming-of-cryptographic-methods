@@ -21,9 +21,9 @@ import (
 
 // OCSP-like response status values
 const (
-	StatusGood    = 0
-	StatusRevoked = 1
-	StatusUnknown = 2
+	StatusGood    = "valid"
+	StatusRevoked = "revoked"
+	StatusUnknown = "unknown"
 )
 
 // Signed certificate status response structure
@@ -43,7 +43,7 @@ type StatusResponseData struct {
 	// Certificate serial number being queried
 	SerialNumber string `json:"serial_number"`
 	// Certificate status (0=good, 1=revoked, 2=unknown)
-	CertStatus int `json:"cert_status"`
+	CertStatus string `json:"cert_status"`
 	// Time when this response was generated
 	ThisUpdate time.Time `json:"this_update"`
 	// Time when next update will be available (optional)
