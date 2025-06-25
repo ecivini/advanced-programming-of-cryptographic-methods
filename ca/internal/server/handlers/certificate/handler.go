@@ -10,6 +10,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"time"
@@ -31,7 +32,11 @@ type CertificateHandler struct {
 
 func BuildCertificateHandler(repo CertificateRepository, email *email.EmailService) CertificateHandler {
 	// Initialize response signer and nonce manager
-	responseSigner := NewResponseSigner(repo.hsm, "ca.example.com")
+	responderId := os.Getenv("CA_RESPONDER_ID")
+	if responderId == "" {
+		log.Fatal("CA_RESPONDER_ID environment variable is not set")
+	}
+	responseSigner := NewResponseSigner(repo.hsm, responderId)
 	nonceManager := NewNonceManager()
 
 	return CertificateHandler{
