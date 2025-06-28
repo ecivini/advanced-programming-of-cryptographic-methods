@@ -21,7 +21,7 @@ import (
 
 // OCSP-like response status values
 const (
-	StatusGood    = "valid"
+	StatusGood    = "good"
 	StatusRevoked = "revoked"
 	StatusUnknown = "unknown"
 )

@@ -1,64 +1,89 @@
 \chapter{Security Considerations}
 
-This chapter critically examines the security architecture of the implemented Certificate Authority system, focusing on identifying fundamental vulnerabilities and proposing concrete pathways for improvement.
+This chapter critically examines the security architecture of the implemented Certificate 
+Authority system, focusing on identifying fundamental vulnerabilities and proposing 
+concrete pathways for improvement.
 
-
-\section{Use of custom JSON-based OCSP responses}
-
-The implementation uses custom JSON-based response formats instead of standard ASN.1 OCSP responses, creating fundamental incompatibility with the broader PKI ecosystem. This decision isolates the CA from existing PKI tools, browsers, and validation libraries that expect RFC 6960 compliant responses.
-
-The custom format prevents integration with Certificate Transparency systems, blocks browser-based certificate validation, and requires custom client implementations for every system. Organizations must build custom integration layers, significantly increasing deployment complexity and limiting practical utility.
-
-Resolution requires implementing full RFC 6960 compliance with ASN.1 DER encoding while maintaining backward compatibility during transition. This affects the entire client-server protocol and requires careful coordination to avoid breaking existing integrations.
 
 \section{Missing certificate extensions}
 
-The certificate generation process lacks essential X.509 extensions required for proper PKI operation. Missing Authority Key Identifier and Subject Key Identifier extensions create problems for certificate chain validation and path building. The absence of Certificate Policies extensions prevents policy-based validation required in enterprise environments.
+The certificate generation process lacks Authority Key Identifier and Subject Key Identifier extensions,
+which may cause problems for certificate chain validation. The absence of Certificate Policies extensions 
+prevents policy-based validation required in production environments.
 
-The revocation infrastructure suffers from similar gaps. Missing CRL Distribution Points prevent automated revocation checking, while absent Authority Information Access extensions block automatic issuer certificate retrieval. These omissions force relying parties to implement custom discovery mechanisms, significantly increasing deployment complexity.
+This issue can be addressed by fully supporting RFC 5280 \cite{rfc5280} compliance, 
+including configurable policy engines, name constraints support, and complete certificate path 
+validation logic.
 
-Resolution requires developing a comprehensive extension framework providing full RFC 5280 compliance, including configurable policy engines, name constraints support, and complete certificate path validation logic.
 
+\section{Side channel attacks and information leakage {\color{red}TODO: FIX ISSUE OR DESCRIPTION}}
 
-\section{Side channel attacks and information leakage}
+While Go's crypto library provides constant-time operations for most of its primitives, the CA
+relies on database queries and nonce lookup mechanisms that can leak information through timing
+patterns. 
 
-The system exhibits concerning information disclosure patterns that could provide attackers with valuable intelligence about internal architecture and state. Timing variations in cryptographic operations represent the most serious vulnerability, with signature verification showing different execution times based on validity and HSM state.
+Database queries reveal certificate existence through timing patterns, while nonce lookup mechanisms 
+use standard hash operations with predictable performance characteristics. Error message patterns
+provide another disclosure channel, allowing attackers to distinguish between different failure 
+conditions and map internal system architecture.
 
-Database queries reveal certificate existence through timing patterns, while nonce lookup mechanisms use standard hash operations with predictable performance characteristics. Error message patterns provide another disclosure channel, allowing attackers to distinguish between different failure conditions and map internal system architecture.
-
-Resolution requires implementing constant-time operations, normalizing response timing through artificial delays, and sanitizing error responses to provide uniform feedback regardless of underlying failure conditions.
+Resolution requires implementing constant-time operations, normalizing response timing through 
+artificial delays, and sanitizing error responses to provide uniform feedback regardless of underlying 
+failure conditions.
 
 
 \section{HSM as a single point of failure}
 
-The current architecture presents a critical vulnerability through its reliance on a single HSM instance for all cryptographic operations. This design creates a single point of failure that could render the entire CA infrastructure inoperable if the HSM becomes unavailable due to hardware failure, network connectivity issues, or maintenance requirements.
+The current architecture relies on a single HSM instance for all cryptographic operations. 
+This design creates a single point of failure for the entire CA, making it inoperable if the HSM 
+becomes unavailable due to hardware failure, network connectivity issues, or maintenance requirements.
 
-The centralized HSM approach means that all certificate signing operations, key generation, and cryptographic validations depend on a single cryptographic device. Any disruption to HSM availability immediately halts all CA operations, preventing certificate issuance, revocation, and status verification. This design violates fundamental principles of high-availability system architecture and creates unacceptable operational risks for production environments.
+Furthermore, the HSM represents a single point of compromise where an attacker who gains access to 
+the HSM could potentially sign malicious certificates, extract private key material, or manipulate 
+the cryptographic operations. 
 
-Furthermore, the HSM represents a single point of compromise where an attacker who gains access to the HSM could potentially sign malicious certificates, extract private key material, or manipulate the cryptographic operations that form the foundation of the CA's trust model. The lack of key distribution or threshold cryptography means that the security of the entire PKI infrastructure depends entirely on the security of a single device.
+This issue can be addressed by requiring HSM redundancy through clustered HSM deployments, threshold 
+cryptography that distributes signing operations across multiple HSMs, automated failover mechanisms 
+that maintain service continuity during HSM maintenance or failure, and comprehensive HSM monitoring 
+with real-time availability checking. 
 
-Production PKI environments require HSM redundancy through clustered HSM deployments, threshold cryptography that distributes signing operations across multiple HSMs, automated failover mechanisms that maintain service continuity during HSM maintenance or failure, and comprehensive HSM monitoring with real-time availability checking. These enhancements transform the HSM from a single point of failure into a resilient cryptographic infrastructure capable of maintaining operations under various failure scenarios.
+\section{Simplified revocation mechanism}
 
+The revocation mechanism lacks reason codes that specify the cause of the revocation events, 
+limiting incident response capabilities. Because of the same reason, the system provides no mechanism 
+for CA-initiated revocation, creating problems when certificates need revocation due to external 
+threats but certificate holders are unavailable.
 
-\section{Inadequate key validation and security enforcement}
-
-The current public key validation performs only basic ASN.1 format checking, missing critical opportunities to detect weak keys, inappropriate parameters, or compromised cryptographic material before certificate issuance. This superficial approach creates risks of issuing certificates for cryptographically weak keys, deprecated curve parameters, or keys below current security standards.
-
-Enhanced validation requires comprehensive key strength analysis following NIST guidelines, verification of elliptic curve parameters against approved standards, checking against databases of known compromised keys, and enforcement of evolving minimum security requirements.
-
-\section{Incomplete revocation infrastructure}
-
-The revocation mechanism lacks critical features for production environments. The absence of revocation reason codes prevents proper classification of revocation events, hampering incident response capabilities. The system provides no mechanism for CA-initiated revocation, creating problems when certificates need revocation due to external threats but certificate holders are unavailable.
-
-Required enhancements include revocation reason code support, CA-initiated revocation capabilities, emergency revocation procedures, bulk revocation mechanisms, and automated notification systems for timely communication of revocation events.
+This problem can be addressed by extending the revocation mechanism to include reason codes that specify 
+the cause of the revocation events, and by implementing a mechanism for the CA to initiate revocation 
+when necessary. This would allow the CA to revoke certificates in response to external threats, 
+even when certificate holders are unavailable. To prevent censorship, the reason codes should be included
+in the OCSP responses, allowing the relying parties to understand the reason for the revocation
+without trusting blindly the CA.
 
 
 \section{Lack of post-quantum cryptography support}
 
-The current implementation lacks post-quantum cryptography support, creating a significant long-term security vulnerability as quantum computing technology advances. The system relies entirely on ECDSA-SHA256, which will become vulnerable when cryptographically relevant quantum computers emerge, potentially within the next 10-15 years.
+The current implementation lacks post-quantum cryptography support, creating a significant 
+long-term security vulnerability as quantum computing technology advances. The system relies entirely 
+on ECDSA-SHA256, which will become vulnerable as quantum computers becomes more powerful.
 
-This limitation stems from the use of local-hsm, an emulated version of AWS KMS that provides a simplified HSM interface for development purposes. Unlike production AWS KMS, local-hsm does not support post-quantum algorithms such as CRYSTALS-Dilithium or CRYSTALS-Kyber, preventing the implementation of quantum-resistant cryptography within the current development environment.
+While we initially thought about adding support for post-quantum algorithms, we were limited by the ones 
+supported by \textit{local-hsm}, an emulated version of AWS KMS that provides a 
+simplified HSM capabilities for development purposes. Unlike production AWS KMS, \textit{local-hsm} does 
+not support post-quantum algorithms such as CRYSTALS-Dilithium or CRYSTALS-Kyber, preventing the 
+implementation of quantum-resistant cryptography within our development environment. because of this,
+the CA cannot generate hybrid certificates that provide both current ECDSA compatibility 
+and quantum resistance.
 
-The absence of post-quantum support means the CA cannot generate hybrid certificates that provide both current ECDSA compatibility and quantum resistance. This architectural limitation prevents preparation for the inevitable quantum transition and leaves the system vulnerable to future quantum attacks on elliptic curve cryptography.
+To address this issue, it is enough to use a production HSM that supports post-quantum algorithms, such as AWS KMS,
+but unfortunately there is not free plan to use it.
 
-Addressing this vulnerability requires migrating from local-hsm to production AWS KMS that supports post-quantum algorithms, implementing hybrid signature schemes that combine classical and post-quantum cryptography, and establishing a transition timeline for quantum-resistant certificate deployment. This migration represents a fundamental architectural change that affects all cryptographic operations and requires careful planning to maintain compatibility during the transition period.
+\section{Use of custom JSON-based OCSP responses}
+
+The implementation uses custom JSON-based response formats due to simplicity and speed of development 
+for this MVP. These responses try to emulate the ones in RFC 6960 \cite{rfc6960}, implementing a subset of all
+specified cases due to time constraints.
+Because of this, a significant future improvement would be to use ASN.1 OCSP responses, making this 
+implementation more compatible with the already existing PKI ecosystem. Considering that the core 
+functionalities of OCSP are already implemented, this change should not require signficant effort.
