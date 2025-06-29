@@ -14,11 +14,17 @@ export const parseErrorResponse = async (response) => {
 
 // Make an API request with JSON data and handle errors
 export const makeApiRequest = async (url, data, method = 'POST', expectJson = true) => {
-  const response = await fetch(url, {
+  const options = {
     method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
+    headers: { 'Content-Type': 'application/json' }
+  };
+
+  // Only add body if data is provided and method supports it
+  if (data && ['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
+    options.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(url, options);
 
   if (!response.ok) {
     const errorMessage = await parseErrorResponse(response);

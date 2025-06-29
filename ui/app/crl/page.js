@@ -16,7 +16,10 @@ export default function CrlPage() {
         setLoading(true);
         setError(null);
         
-        const crlURL = `${CA_URL}/v1/crl?page=${page}&page_size=${pageSize}`;
+        // Generate required nonce and timestamp for signed responses
+        const nonce = Math.floor(Math.random() * 999999) + 1; // Ensure nonce is between 1 and 1000000
+        const timestamp = new Date().toISOString();
+        const crlURL = `${CA_URL}/v1/crl?page=${page}&page_size=${pageSize}&nonce=${nonce}&timestamp=${encodeURIComponent(timestamp)}`;
         const res = await fetch(crlURL);
         
         if (!res.ok) {
@@ -33,7 +36,15 @@ export default function CrlPage() {
         }
         
         const data = await res.json();
-        const certificates = Array.isArray(data) ? data : [];
+        
+        // Backend returns a signed response with structure: {response_data: {revoked_certificates: [...]}}
+        let certificates = [];
+        if (data.response_data && data.response_data.revoked_certificates) {
+          certificates = data.response_data.revoked_certificates;
+        } else if (Array.isArray(data)) {
+          // Fallback for direct array response
+          certificates = data;
+        }
         
         if (page === 1) {
           setCrl(certificates);
