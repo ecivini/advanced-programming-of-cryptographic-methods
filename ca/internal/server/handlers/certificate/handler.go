@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"os"
 	"slices"
-	"strconv"
 	"time"
 )
 
@@ -375,40 +374,36 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 }
 
 func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *http.Request) {
-	// Parse pagination parameters
-	page, err := strconv.Atoi(r.URL.Query().Get("page"))
-	if err != nil || page < 1 {
+	var request CrlRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		handlers.ReturnErroredResponse("Invalid request format", &w, http.StatusBadRequest)
+		return
+	}
+
+	if request.Page < 1 {
 		handlers.ReturnErroredResponse("Invalid page parameter", &w, http.StatusBadRequest)
 		return
 	}
 
-	pageSize, err := strconv.Atoi(r.URL.Query().Get("page_size"))
-	if err != nil || pageSize < 10 || pageSize > 100 {
+	if request.PageSize < 10 || request.PageSize > 100 {
 		handlers.ReturnErroredResponse("Invalid page_size parameter, must be between 10 and 100", &w, http.StatusBadRequest)
 		return
 	}
 
-	nonce, err := strconv.Atoi(r.URL.Query().Get("nonce"))
-	if err != nil || nonce < 1 {
+	if request.Nonce < 1 {
 		handlers.ReturnErroredResponse("Invalid nonce parameter", &w, http.StatusBadRequest)
 		return
 	}
 
-	timestampRaw := r.URL.Query().Get("timestamp")
-	timestamp, err := time.Parse(time.RFC3339, timestampRaw)
-	if err != nil {
-		handlers.ReturnErroredResponse("Invalid timestamp parameter", &w, http.StatusBadRequest)
-		return
-	}
-
 	// Validate nonce and timestamp
-	if err := h.nonceManager.ValidateAndUseNonce(nonce, timestamp); err != nil {
+	if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
 		handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
 		return
 	}
 
 	// Get revoked certificates
-	revokedCertificates, err := h.repo.GetRevokedCertificates(page, pageSize)
+	revokedCertificates, err := h.repo.GetRevokedCertificates(request.Page, request.PageSize)
 	if err != nil {
 		fmt.Println("[-] Failed to retrieve revocation list:", err)
 		handlers.ReturnErroredResponse("Failed to retrieve revocation list", &w, http.StatusInternalServerError)
@@ -435,10 +430,10 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		RevokedCertificates: revokedCertInfos,
 		ThisUpdate:          now,
 		NextUpdate:          nextUpdate,
-		Page:                page,
-		PageSize:            pageSize,
+		Page:                request.Page,
+		PageSize:            request.PageSize,
 		TotalCount:          totalCount,
-		Nonce:               nonce,
+		Nonce:               request.Nonce,
 	}
 
 	// Sign the response

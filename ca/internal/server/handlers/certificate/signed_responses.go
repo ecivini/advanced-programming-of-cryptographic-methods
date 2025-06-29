@@ -61,7 +61,17 @@ type StatusResponseData struct {
 // Certificate status request with nonce for replay protection
 type StatusRequest struct {
 	SerialNumber string `json:"serial_number"`
-	// Nonce for replay protection (base64 encoded)
+	// Nonce for replay protection
+	Nonce int `json:"nonce"`
+	// Timestamp of request (additional replay protection)
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// Crl status request with nonce for replay protection
+type CrlRequest struct {
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
+	// Nonce for replay protection
 	Nonce int `json:"nonce"`
 	// Timestamp of request (additional replay protection)
 	Timestamp time.Time `json:"timestamp"`

@@ -300,8 +300,8 @@ export function parseCertificateInfo(certificateData) {
 // Check if certificate is revoked by querying certificate status
 export async function checkRevocationStatus(serialNumber, caUrl) {
   try {
-    // Generate required nonce and timestamp for signed responses
-    const nonce = Math.floor(Math.random() * 999999) + 1; // Ensure nonce is between 1 and 1000000
+    // Generate cryptographically secure nonce and timestamp
+    const nonce = crypto.getRandomValues(new Uint32Array(1))[0];
     const timestamp = new Date().toISOString();
     
     // Query certificate status API with POST request and required parameters
@@ -310,8 +310,8 @@ export async function checkRevocationStatus(serialNumber, caUrl) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        serial_number: serialNumber,  // Backend expects serial_number with underscore
-        nonce: nonce,                 // Backend expects integer nonce
+        serial_number: serialNumber,
+        nonce: nonce,
         timestamp: timestamp
       })
     });
@@ -332,6 +332,7 @@ export async function checkRevocationStatus(serialNumber, caUrl) {
     }
     
     // Check if the certificate has revocation flag set
+    console.log('Certificate status response:', responseData);
     return { 
       isRevoked: responseData.cert_status === 'revoked',
       revocationDate: responseData.revocation_time || null,

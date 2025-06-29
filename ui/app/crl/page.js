@@ -17,10 +17,22 @@ export default function CrlPage() {
         setError(null);
         
         // Generate required nonce and timestamp for signed responses
-        const nonce = Math.floor(Math.random() * 999999) + 1; // Ensure nonce is between 1 and 1000000
+        const nonce = crypto.getRandomValues(new Uint32Array(1))[0];
         const timestamp = new Date().toISOString();
-        const crlURL = `${CA_URL}/v1/crl?page=${page}&page_size=${pageSize}&nonce=${nonce}&timestamp=${encodeURIComponent(timestamp)}`;
-        const res = await fetch(crlURL);
+        const crlURL = `${CA_URL}/v1/crl?`;
+        const body = JSON.stringify({
+          page: page,
+          page_size: pageSize,
+          nonce: nonce,
+          timestamp: timestamp
+        });
+        const res = await fetch(crlURL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: body,
+        });
         
         if (!res.ok) {
           if (res.status === 404) {
