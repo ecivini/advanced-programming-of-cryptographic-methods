@@ -1,283 +1,503 @@
-\chapter{Technical Details}
-\label{Tools}
+\chapter{System Architecture and Certificate Lifecycle}
+\label{Architecture}
 
-This chapter provides comprehensive technical details about the Certificate Authority implementation, covering the system architecture, implementation technologies, and detailed code structure. The information presented here enables a thorough understanding of the technical decisions and implementation approaches used in this project.
+This chapter presents the architectural design decisions and  operational flows 
+of the Certificate Authority. The focus is on explaining how the various 
+components interact throughout the complete certificate lifecycle, from initial 
+identity commitment to certificate issuance, renewal, and revocation.
 
-\section{Architecture}
 
-The Certificate Authority system follows a microservices-based architecture designed for scalability, security, and maintainability. The system is composed of several distinct modules that work together to provide comprehensive PKI services.
+\section{Source code structure}
 
-\subsection{High-Level Architecture}
+The system consists of four primary components, each serving a specific role in 
+the certificate lifecycle:
 
-The system architecture consists of four primary components:
+\subsection{CA backend server} 
+The core service responsible for all cryptographic operations and certificate 
+lifecycle management. Go was selected for its strong and complete cryptographic standard library, 
+excellent performance characteristics, and simplicity of development
 
-\begin{enumerate}
-    \item \textbf{CA Backend Server}: A Go-based REST API server that handles all certificate operations, including issuance, revocation, and validation.
-    
-    \item \textbf{Web User Interface}: A Next.js-based frontend application that provides an intuitive interface for certificate management operations.
-    
-    \item \textbf{Database Layer}: MongoDB database for persistent storage of certificates, revocation lists, and audit information.
-    
-    \item \textbf{Hardware Security Module (HSM)}: Cloud-based HSM integration for secure cryptographic operations and private key protection.
-\end{enumerate}
+\subsection{Web User Interface}
+A React-based frontend providing certificate management capabilities. As this UI is intended 
+to be used only for demo purposes, Next.js was chosen for its ease of use, built-in routing, 
+and vast ecosystem of libraries.
 
-\subsection{Component Interaction}
+\subsection{Database}
+Persistent storage for certificates and revocation lists. We decided to use MongoDB for its
+document-oriented structure, which allows flexible storage and suits well with the certificate and 
+metadata requirements. It also provides indexing capabilities for efficient 
+querying and retrieval of certificate data.
 
-The architecture follows a layered approach with clear separation of concerns:
+\subsection{Hardware Security Module (AWS KMS)}
+We decided to use an HSM, in particulare an emulated version of AWS KMS, to ensure that all CA 
+private key operations occur within FIPS 140-2 Level 3 certified hardware. 
+This design decision eliminates the risk of private key exposure while providing 
+enterprise-grade security and audit capabilities.
 
+\section{Security-first architecture}
+
+The architecture implements security principles through multiple 
+layers of protection.
+
+\subsection{Cryptographic isolation}
+The CA's root private key never exists outside 
+the HSM boundary. All signing operations are performed through secure API calls 
+to the HSM, ensuring the key material remains protected even if other system 
+components are compromised.
+
+\subsection{Identity verification}
+A two-step identity verification process combines 
+email ownership verification with cryptographic proof of private key possession. 
+This dual verification ensures only legitimate key owners can obtain certificates.
+
+\subsection{Signed responses}
+All CA responses are cryptographically signed to ensure 
+integrity and authenticity. This prevents response tampering and provides 
+non-repudiation for all CA operations.
+
+\subsection{Replay protection}
+Nonce-based replay protection mechanisms prevent 
+malicious reuse of previously captured requests, protecting against replay attacks.
+
+\section{Certificate lifecycle operations}
+
+This section details the complete certificate lifecycle, explaining the message 
+flows, cryptographic operations, and component interactions for each phase.
+
+\subsection{Phase 1: identity commitment}
+
+The certificate issuance process begins with an identity commitment phase that 
+establishes and verifies user identity through a secure multi-step protocol.
+
+\subsubsection{Client-side operations}
+
+The process initiates when a user accesses the certificate request interface. 
+The client application, running in the browser, generates a new cryptographic 
+key pair using the Web Crypto API. The user selects their preferred key type 
+(ECDSA P-256, RSA 2048-bit, or RSA 4096-bit) based on their security requirements 
+and intended certificate usage.
+
+The client extracts the public key from the generated pair and formats it as 
+a PEM-encoded certificate signing request. Along with the user's email address 
+and selected key type, this information forms the identity commitment request.
+
+\subsubsection{CA backend processing}
+
+When the CA backend receives the commitment request at the `/commit-identity` 
+endpoint, it performs comprehensive validation:
+
+The system validates the email address format using standard RFC 5322 compliance 
+checking. The provided key type must match one of the supported algorithms 
+(ECDSA, RSA\_2048, RSA\_4096). The public key undergoes cryptographic validation 
+to ensure it is mathematically valid and properly formatted.
+
+Upon successful validation, the CA generates a unique challenge string and creates 
+an identity commitment record in the database. This record contains the user's 
+email, public key in DER format, selected key type, challenge string, and an 
+expiration timestamp. The CA reserves a unique serial number for the eventual 
+certificate, ensuring no conflicts occur during concurrent requests.
+
+\subsubsection{Email verification}
+
+The identity verification process leverages email ownership as proof of identity. 
+The CA's email service sends the challenge string to the user's provided email 
+address using a secure email delivery service.
+
+This email-based verification serves dual purposes: it confirms the user has 
+access to the claimed email address and provides the challenge string needed 
+for the subsequent cryptographic proof phase. The challenge has a limited 
+validity period (typically 24 hours) to prevent indefinite pending commitments.
+
+\subsection{Phase 2: certificate generation}
+
+The certificate generation phase requires cryptographic proof of private key 
+ownership before the CA will issue a certificate.
+
+\subsubsection{Challenge response}
+
+After receiving the challenge via email, the user returns to the certificate 
+interface and provides the challenge string. The client application retrieves 
+the challenge and prompts the user to sign it using their private key.
+
+The signing operation occurs entirely within the browser using the Web Crypto API. 
+The client signs the raw challenge bytes using the private key corresponding to 
+the public key submitted during commitment. This creates a digital signature 
+that proves the user possesses the private key without exposing it.
+
+\subsubsection{CA verification and certificate issuance}
+
+The CA receives the challenge response containing the challenge string and the 
+cryptographic signature. The system performs several critical verification steps:
+
+First, the CA retrieves the identity commitment record using the provided challenge. 
+It verifies the commitment hasn't expired and hasn't been previously used, 
+preventing replay attacks and ensuring temporal validity.
+
+Next, the CA performs signature verification using the public key from the 
+commitment record. This cryptographic verification proves the requester possesses 
+the corresponding private key. The verification process uses the appropriate 
+algorithm (ECDSA or RSA) based on the committed key type.
+
+Upon successful verification, the CA initiates certificate generation. The system 
+constructs an X.509 certificate containing the user's public key, email address 
+as the subject, and the reserved serial number. The certificate includes standard 
+extensions such as key usage, basic constraints, and subject alternative names.
+
+\subsubsection{HSM-Based certificate signing}
+
+The certificate signing operation represents the most security-critical component 
+of the entire system. The CA never signs certificates using local private keys; 
+instead, all signing operations occur within the Hardware Security Module.
+
+The CA formats the certificate structure and sends it to the HSM through the 
+AWS KMS API. The HSM performs the cryptographic signing operation using the 
+CA's root private key, which never leaves the secure hardware boundary. This 
+approach ensures the highest level of security for the CA's signing operations.
+
+The HSM returns the signature, which the CA combines with the certificate data 
+to produce the final signed X.509 certificate. The completed certificate is 
+returned to the client in PEM format, ready for immediate use.
+
+\subsection{Phase 3: certificate revocation}
+
+Certificate revocation enables certificate owners to invalidate their certificates 
+before their natural expiration, essential for handling key compromise or 
+changing security requirements.
+
+\subsubsection{Revocation request authentication}
+
+The revocation process begins when a certificate owner accesses the revocation 
+interface and provides their certificate's serial number. The system requires 
+cryptographic proof that the requester owns the certificate's corresponding 
+private key.
+
+The client constructs a revocation message in the format "Revoke: $<$serial number$>$" 
+where the serial number matches the certificate being revoked. The user signs 
+this message using their private key, creating a revocation signature that 
+proves their authority to revoke the certificate.
+
+\subsubsection{CA revocation processing}
+
+The CA receives the revocation request containing the serial number and signature. 
+The system retrieves the original identity commitment record associated with 
+the serial number to obtain the corresponding public key.
+
+The CA verifies the revocation signature against the constructed message 
+"Revoke: $<$serial number$>$" using the certificate's public key. This verification 
+ensures only the legitimate certificate owner can initiate revocation.
+
+Upon successful verification, the CA updates the certificate record in the database, 
+marking it as revoked with the current timestamp. The revoked certificate is 
+immediately added to the Certificate Revocation List (CRL), making the revocation 
+status publicly available through the CRL endpoint.
+
+\subsection{Phase 4: certificate renewal}
+
+Certificate renewal allows users to extend their certificate validity period 
+without generating new key pairs, maintaining continuity while refreshing 
+the certificate's temporal validity.
+
+\subsubsection{Renewal request process}
+{\color{red}TODO: Risk of replay attack? request can be replicated}
+The renewal process requires the certificate owner to prove continued possession 
+of the private key. The client constructs a renewal message in the format 
+"Renew: $<$serial number$>$" and signs it using the certificate's private key.
+
+This signature proves the requester still controls the private key associated 
+with the certificate, ensuring only legitimate certificate owners can renew 
+their certificates.
+
+\subsubsection{CA renewal validation and processing}
+
+The CA performs several validation steps before processing renewal requests:
+
+The system verifies the certificate exists and hasn't been revoked. It confirms 
+the certificate hasn't expired, as expired certificates cannot be renewed. 
+The CA validates the renewal signature against the message "Renew: $<$serial number$>$" 
+using the certificate's public key.
+
+Upon successful validation, the CA extends the certificate's validity period 
+(typically by one year) and generates a new certificate with the updated expiration 
+date. The renewed certificate maintains the same serial number and subject 
+information while reflecting the extended validity period.
+
+\subsubsection{HSM integration in renewal}
+
+Similar to initial certificate issuance, the renewal process involves HSM-based 
+signing operations. The CA constructs the renewed certificate structure and 
+submits it to the HSM for signing using the root private key.
+
+This ensures renewed certificates maintain the same level of cryptographic 
+integrity as originally issued certificates, with all signing operations 
+occurring within the secure hardware boundary.
+
+\section{Component interactions and message flows}
+
+This section provides detailed analysis of how system components communicate during 
+certificate operations, emphasizing the role of the HSM and signed responses.
+
+\subsection{Frontend-backend communication}
+{\color{red}TODO: Add diagrams?}
+
+The web interface communicates with the CA backend through RESTful API endpoints, 
+with each operation following specific message flow patterns.
+
+The process starts with the identity commitment flow, where the frontend sends a POST request to 
+`/v1/identity` containing the user's email, public key in PEM format, and 
+selected key type. The backend responds with an HTTP 200 status upon successful 
+commitment creation, triggering the email verification process.
+
+Then, once the use has received the challenge via email and wrote it into the `Sign` section
+together with the associate private key, the frontend computes the required signature and submits 
+a POST request to `/v1/certificate` with the challenge string and signature. 
+The backend validates the signature and returns the signed certificate in PEM format.
+
+When a user wants to revoke a certificate, the frontend sends a POST request to 
+`/v1/certificate/revoke` containing the revocation signature. The backend validates 
+the signature and confirms revocation through a JSON response.
+
+{\color{red}TODO: Maybe move serial parameter into payload?}
+Similarly, when a user wants to renew a certificate, the frontend sends a POST 
+requests to `/v1/certificate/renew/{serial}` containing renewal signatures. Successful renewal 
+returns both confirmation and the renewed certificate.
+
+\subsection{HSM integration patterns}
+
+The HSM integration follows secure communication patterns 
+that ensure private key material never leaves the secure boundary:
+
+\subsection{Key creation}
+During system initialization, the CA creates a root key 
+within the HSM using the AWS KMS CreateKey API. The key specification uses 
+ECC NIST P-256 for its security and performance. The HSM generates the key 
+pair entirely within secure hardware, returning only the key identifier.
+
+\subsection{Certificate signing}
+For each certificate signing operation, the CA 
+constructs the certificate structure locally and sends it to the HSM via the 
+KMS Sign API. The HSM performs the cryptographic signature using the stored 
+private key and returns only the signature bytes. This pattern ensures the 
+private key never exists outside the HSM boundary.
+
+\subsection{Root certificate generation}
+The system generates the CA's root certificate 
+by creating the certificate structure and requesting HSM signing. The resulting 
+self-signed root certificate establishes the trust anchor for all issued certificates.
+
+\section{Signed responses}
+
+To ensure response integrity and prevent tampering, the system implements 
+OCSP-like signed responses for critical operations:
+
+\subsection{Response structure}
+Each signed response contains response data, 
+signature algorithm identifier, Base64-encoded signature, and optional signing 
+certificate chain. The response data includes nonces for replay protection 
+and timestamps for freshness validation.
+
+\subsection{Certificate status responses}
+When clients query certificate status, 
+the CA constructs a response containing the serial number, status (good/revoked/unknown), 
+update timestamps, and revocation details if applicable. The complete response 
+is signed using the HSM to ensure authenticity.
+
+\subsection{Revocation list responses}
+Certificate Revocation List queries return 
+signed responses containing the list of revoked certificates with pagination 
+support. Each response includes update timestamps and replay protection nonces.
+
+% \section{Security Considerations and Implementation}
+
+% The security implementation encompasses multiple layers of protection to ensure 
+% the integrity and confidentiality of the certificate authority operations.
+
+% \subsection{Cryptographic Security}
+
+% \textbf{Key Generation}: All cryptographic keys use cryptographically secure 
+% random number generation. Client-side key generation employs the Web Crypto API's 
+% secure random functions, while HSM key generation uses FIPS 140-2 Level 3 
+% certified random number generators.
+
+% \textbf{Signature Algorithms}: The system supports multiple signature algorithms 
+% including ECDSA with P-256 curves and RSA with 2048-bit and 4096-bit key sizes. 
+% Algorithm selection balances security requirements with performance considerations.
+
+% \textbf{Hash Functions}: All cryptographic operations use SHA-256 or stronger 
+% hash functions to ensure collision resistance and security against known attacks.
+
+% \subsection{Identity Verification Security}
+
+% \textbf{Multi-Factor Verification}: The identity verification process combines 
+% email ownership proof with cryptographic key ownership proof. This dual verification 
+% significantly reduces the risk of fraudulent certificate issuance.
+
+% \textbf{Challenge Uniqueness}: Each identity commitment receives a unique challenge 
+% string generated using cryptographically secure random functions. Challenge 
+% reuse is prevented through database constraints and validation logic.
+
+% \textbf{Temporal Validity}: All challenges and commitments have limited validity 
+% periods to prevent indefinite pending states and reduce attack windows.
+
+% \subsection{Replay Attack Protection}
+
+% \textbf{Nonce-Based Protection}: Critical operations include nonces to prevent 
+% replay attacks. Each request receives a unique nonce that cannot be reused, 
+% ensuring the freshness of all operations.
+
+% \textbf{Timestamp Validation}: Response freshness is enforced through timestamp 
+% validation, preventing the reuse of stale responses even if signatures remain valid.
+
+% \textbf{One-Time Use Enforcement}: Challenge strings and similar authentication 
+% tokens are marked as used after successful operations, preventing their reuse 
+% in subsequent attacks.
+
+% \section{Operational Considerations}
+
+% The practical deployment and operation of the Certificate Authority system requires 
+% careful consideration of performance, monitoring, and maintenance aspects.
+
+% \subsection{Performance and Scalability}
+
+% \textbf{HSM Operation Latency}: HSM operations introduce network latency due to 
+% API calls to AWS KMS. The system is designed to minimize HSM interactions by 
+% performing all local validation before requesting signing operations. Typical 
+% HSM signing operations complete within 100-500 milliseconds depending on 
+% network conditions.
+
+% \textbf{Database Performance}: MongoDB indices on serial numbers, email addresses, 
+% and challenge strings ensure efficient query performance even with large certificate 
+% volumes. Compound indices support complex queries required for CRL generation 
+% and certificate status checking.
+
+% \textbf{Concurrent Request Handling}: The Go backend's goroutine-based concurrency 
+% model enables handling of multiple certificate requests simultaneously. Each request 
+% operates independently, with database transactions ensuring consistency during 
+% concurrent operations.
+
+% \subsection{Monitoring and Logging}
+
+% \textbf{Audit Trail Completeness}: Every significant operation generates comprehensive 
+% audit logs including timestamps, user identifiers, operation outcomes, and HSM 
+% interaction records. These logs support compliance requirements and incident 
+% investigation procedures.
+
+% \textbf{HSM Operation Monitoring}: AWS CloudTrail provides detailed logs of all 
+% KMS operations, enabling monitoring of HSM usage patterns and detection of 
+% anomalous signing activity. Integration with monitoring systems can alert 
+% administrators to unusual HSM usage patterns.
+
+% \textbf{System Health Monitoring}: Health check endpoints enable external monitoring 
+% systems to verify CA availability and database connectivity. Container health 
+% checks ensure rapid detection and recovery from component failures.
+
+% \subsection{Maintenance and Updates}
+
+% \textbf{Certificate Expiration Management}: The system tracks certificate expiration 
+% dates and can generate reports or notifications for certificates approaching 
+% expiration. Automated renewal processes can be implemented for qualifying certificates.
+
+% \textbf{CRL Update Frequency}: Certificate Revocation Lists are updated in real-time 
+% as certificates are revoked. The signed CRL responses include nextUpdate timestamps 
+% indicating when clients should refresh their cached CRL data.
+
+% \textbf{HSM Key Rotation}: AWS KMS supports automatic key rotation policies that 
+% can be configured based on organizational security requirements. Key rotation 
+% maintains backward compatibility while enhancing long-term security.
+
+% This comprehensive architecture ensures the Certificate Authority system provides 
+% reliable, secure, and scalable PKI services while maintaining the highest 
+% standards of cryptographic security through HSM integration and defense-in-depth 
+% security practices.
+
+\section{Code Structure and Organization}
+
+The project follows a monorepo structure with clear separation between different 
+services and components, enabling independent development and deployment while 
+maintaining code organization.
+
+\subsection{Backend service (ca/)}
+This directory contains the complete Go-based Certificate Authority 
+server implementation. This module includes the REST API server, HSM integration, 
+database operations, and email services. The structure follows Go's standard 
+project layout with clear separation between commands, internal packages, and 
+configuration. It is organized as follows:
 \begin{itemize}
-    \item \textbf{Presentation Layer}: The web UI communicates with the CA backend through RESTful API calls, handling user interactions and data visualization.
-    
-    \item \textbf{Business Logic Layer}: The CA server implements all PKI business logic, including certificate lifecycle management, validation rules, and identity verification processes.
-    
-    \item \textbf{Data Persistence Layer}: MongoDB provides reliable storage for certificates, CRL entries, and operational logs.
-    
-    \item \textbf{Security Layer}: HSM integration ensures that all cryptographic operations involving the CA's private key are performed within secure hardware boundaries.
+    \item \textbf{cmd/}: Contains the main application entry point and service 
+    initialization logic.
+    \item \textbf{internal/}: Core business logic modules including configuration, 
+    database operations, HSM integration, email services, and HTTP server implementation.
+    \item \textbf{handler/}: RESTful API endpoint implementations organized by 
+    functionality (e.g., certificate operations, health monitoring).
 \end{itemize}
 
-\subsection{Security Architecture}
-
-The security architecture implements defense-in-depth principles:
-
+\subsection{Frontend application (ui/)}
+This directory contains the Next.js-based web interface 
+providing user-facing certificate management capabilities. The structure follows 
+Next.js App Router conventions with organized pages, components, and utility 
+functions for cryptographic operations.
+In particular:
 \begin{itemize}
-    \item \textbf{HSM Integration}: All CA private key operations are performed within the HSM, ensuring the key never exists in plaintext outside secure hardware.
-    
-    \item \textbf{Authentication Mechanisms}: Multi-layered authentication including email verification and private key ownership proof.
-    
+    \item \textbf{app/}: Contains the main application entry point, routing, and 
+    layout definitions. The directory structure follows Next.js conventions with 
+    pages organized by functionality.
+    \item \textbf{components/}: Reusable UI components such as forms, buttons, 
+    and modals used across different pages.
+    \item \textbf{utils/}: Utility functions for cryptographic operations, API 
+    communication, and data formatting.
 \end{itemize}
 
-\subsection{Deployment Architecture}
+\subsection{Certificates (dev-certs/)}
+This directory, initially empty, contains the root certificate generated by the CA.
 
-The system is containerized using Docker for consistent deployment across different environments:
+\subsection{Deployment Configuration}
+In the root directory of the project there are files including Docker Compose 
+orchestration, MongoDB configuration, and environment setup scripts for 
+containerized deployment.
 
-\begin{itemize}
-    \item Each major component runs in its own Docker container
-    \item Docker Compose orchestrates multi-container deployment
-    \item Environment-specific configurations through environment variables
-    \item Persistent storage volumes for database data
-\end{itemize}
+\section{Dependencies and Libraries}
 
-\section{Implementation}
+The system uses external dependencies to provide robust functionality 
+while minimizing security risks and maintaining code quality.
 
-This section details the technical implementation aspects, including programming languages, frameworks, libraries, and key implementation decisions.
+\subsection{Backend Dependencies}
+Go 1.21+ provides all the packages required for cryptographic operations, thanks to 
+its standard library including crypto/x509, crypto/rsa, crypto/ecdsa, but also net/http 
+for API server functionality.
+To integrate MongoDB, we decided to use the official MongoDB Go driver (go.mongodb.org/mongo-driver/v2) 
+as it provides secure and comprehensive access to MongoDB features, including 
+document-oriented data storage, indexing, and querying capabilities.
+For the HSM, we decided to opt for the official AWS SDK Go library (github.com/aws/aws-sdk-go-v2) 
+as it provides programmatic access to AWS KMS for secure key management and signing 
+operations.
+Lastly, we opted for Resend Go package as it is the official client of the email delivery service
+we decided to use.
 
-\subsection{Backend Implementation}
 
-\textbf{Programming Language}: Go (Golang) 1.21+
+\subsection{Frontend Dependencies}
 
-\textbf{Justification}: Go was chosen for the backend implementation due to its performance characteristics, strong standard library for cryptographic operations, robust concurrency support, and extensive ecosystem for web service development.
+At the core we decided to use Next.js 15 with React 19 as it provides easy routing and
+lots of ui packages with pre-built compotents, which allowed us to speed up the development process.
 
-\textbf{Key Libraries and Frameworks}:
+{\color{red}TODO: Are we using this?}
+We opted for Web Crypto API (browser native) to handle 
+client-side key generation, signing, and certificate validation without requiring 
+external cryptographic libraries.
 
-\begin{itemize}
-    \item \textbf{Go net/http}: HTTP router and URL matcher for building REST APIs with support for middleware and route variables.
-    
-    \item \textbf{MongoDB Driver}: Official \href{go.mongodb.org/mongo-driver/v2}{Go driver for MongoDB} providing high-performance database operations with built-in connection pooling.
-    
-    \item \textbf{AWS SDK for Go}: Integration with AWS KMS for HSM operations, providing secure key management and cryptographic operations.
-    
-    \item \textbf{Go Standard Crypto Libraries}: Extensive use of crypto/x509, crypto/rsa, crypto/ecdsa, and crypto/rand for certificate operations and cryptographic functions.
-    
-    \item \textbf{Email}: Email verification and notification capabilities using Go's Resend package.
-\end{itemize}
+\subsection{Infrastructure Dependencies}
 
-\subsection{Frontend Implementation}
+We opted for Docker and Docker Compose as they allow for easy and consistent deployment 
+environments with isolated service containers. For the database, as we wanted a document-based one,
+we decided to use MongoDB since we were already familiar with it and it provides document-oriented 
+data storage with indexing, and querying capabilities for scalable management.
+For the HSM, the only free solution we found was LocalStack KMS, which provides a local HSM emulation
+for development and testing environments without requiring cloud resources, but emulating the AWS KMS API.
 
-\textbf{Framework}: Next.js 15 with React 19
+\subsection{Security and Compliance Dependencies}
 
-\textbf{Justification}: Next.js provides server-side rendering capabilities, excellent developer experience, and robust production optimizations. React's component-based architecture enables maintainable and reusable UI components.
+All selected dependencies prioritize security and maintain active development 
+with regular security updates. The minimal dependency approach reduces attack 
+surface while leveraging proven, well-maintained libraries from reputable sources. 
 
-\textbf{Key Technologies}:
-
-\begin{itemize}
-    \item \textbf{Tailwind CSS 4.0}: Utility-first CSS framework for rapid UI development with consistent design systems and responsive layouts.
-    
-    \item \textbf{Web Crypto API}: Browser-native cryptographic operations for client-side key generation, signing, and certificate validation without requiring external libraries.
-    
-    \item \textbf{Next.js App Router}: Modern routing system with nested layouts and server components for optimal performance.
-    
-    \item \textbf{React Hooks}: State management and lifecycle handling using modern React patterns including useState, useEffect, and custom hooks.
-\end{itemize}
-
-\subsection{Database Implementation}
-
-\textbf{Database}: MongoDB 7.0+
-
-\textbf{Justification}: MongoDB's document-oriented structure is well-suited for storing certificate data with varying fields and complex nested structures. Its built-in indexing and query capabilities support efficient certificate lookups and CRL operations.
-
-\textbf{Key Features Utilized}:
-
-\begin{itemize}
-    \item \textbf{Document Storage}: Flexible schema for certificate metadata, CRL entries, and audit logs
-    \item \textbf{Indexing}: Optimized queries for certificate serial numbers, email addresses, and revocation status
-\end{itemize}
-
-\subsection{HSM Integration}
-
-\textbf{HSM Provider}: AWS KMS (Key Management Service)
-
-\textbf{Implementation Approach}:
-
-\begin{itemize}
-    \item \textbf{Customer Master Keys (CMK)}: Dedicated CMK for CA operations with hardware-level protection
-    \item \textbf{AWS SDK Integration}: Programmatic access to KMS operations through official AWS SDK
-    \item \textbf{Signing Operations}: All certificate signing performed via KMS API calls
-    \item \textbf{Key Rotation}: Support for automatic key rotation policies
-    \item \textbf{Audit Logging}: Comprehensive logging of all HSM operations through AWS CloudTrail
-\end{itemize}
-
-\subsection{Containerization and Deployment}
-
-\textbf{Container Technology}: Docker with Docker Compose
-
-\textbf{Container Configuration}:
-
-\begin{itemize}
-    \item \textbf{Multi-stage Builds}: Optimized Docker images with separate build and runtime stages
-    \item \textbf{Environment Variables}: Externalized configuration for different deployment environments
-    \item \textbf{Health Checks}: Container health monitoring and automatic restart capabilities
-    \item \textbf{Volume Management}: Persistent storage for database data and certificates
-\end{itemize}
-
-\section{Code Structure}
-
-This section provides a detailed description of the project's code organization, explaining the purpose and functionality of each component.
-
-\subsection{Project Root Structure}
-
-The project follows a monorepo structure with clear separation between different services:
-
-\begin{verbatim}
-advanced-programming-of-cryptographic-methods/
-|-- ca/                 # Backend CA server
-|-- ui/                 # Frontend web application
-|-- dev-certs/          # Development certificates
-|-- report/             # Project documentation
-|-- docker-compose.yml  # Container orchestration
-|-- mongod.conf         # MongoDB configuration
-`-- README.md           # Project overview
-\end{verbatim}
-
-\subsection{Backend Code Structure (ca/)}
-
-The backend follows Go's standard project layout with clear separation of concerns:
-
-\subsubsection{Main Application (cmd/)}
-
-\begin{itemize}
-    \item \textbf{cmd/server/main.go}: Application entry point that initializes all services (HSM, database, email) and starts the HTTP server. Handles dependency injection and graceful shutdown procedures.
-\end{itemize}
-
-\subsubsection{Internal Packages (internal/)}
-
-\begin{itemize}
-    \item \textbf{internal/config/config.go}: Centralized configuration management using environment variables. Handles HSM and server parameters.
-    
-    \item \textbf{internal/db/}: Database abstraction layer
-    \begin{itemize}
-        \item \textbf{db.go}: Database connection management and initialization
-        \item \textbf{models.go}: Data models for certificates, CRL entries, and logs
-    \end{itemize}
-    
-    \item \textbf{internal/email/email.go}: Email service implementation for identity verification and notifications.
-    
-    \item \textbf{internal/hsm/hsm.go}: Hardware Security Module integration layer. Provides abstraction over AWS KMS operations including key creation, signing, and key management.
-    
-    \item \textbf{internal/server/}: HTTP server implementation
-    \begin{itemize}
-        \item \textbf{server.go}: HTTP server initialization, middleware configuration, and route setup
-        \item \textbf{handlers/}: Request handlers organized by functionality
-        \begin{itemize}
-            \item \textbf{health.go}: Health check endpoints for monitoring
-            \item \textbf{info.go}: CA information and public key endpoints
-            \item \textbf{utils.go}: Common handler utilities and response formatting
-            \item \textbf{certificate/}: Certificate-specific handlers
-            \begin{itemize}
-                \item \textbf{handler.go}: Certificate issuance, revocation, and validation endpoints
-                \item \textbf{repository.go}: Database operations for certificate management
-            \end{itemize}
-        \end{itemize}
-    \end{itemize}
-\end{itemize}
-
-\subsubsection{Configuration Files}
-
-\begin{itemize}
-    \item \textbf{go.mod/go.sum}: Go module dependencies and version management
-    \item \textbf{Dockerfile}: Multi-stage Docker build configuration for optimized container images
-\end{itemize}
-
-\subsection{Frontend Code Structure (ui/)}
-
-The frontend follows Next.js 13+ app directory structure with modern React patterns:
-
-\subsubsection{Application Core (app/)}
-
-\begin{itemize}
-    \item \textbf{layout.js}: Root layout component with global styles, navigation, and shared UI elements
-    \item \textbf{page.js}: Home page component with CA overview and navigation links
-    \item \textbf{globals.css}: Global CSS styles including Tailwind CSS imports and custom component styles
-    \item \textbf{favicon.ico}: Application favicon
-\end{itemize}
-
-\subsubsection{Feature Pages (app/)}
-
-\begin{itemize}
-    \item \textbf{sign/page.js}: Certificate signing interface with CSR upload, key generation, and email verification workflows
-    \item \textbf{certs/page.js}: Certificate viewer and revocation interface with ASN.1 parsing and cryptographic operations
-    \item \textbf{crl/page.js}: Certificate Revocation List viewer with pagination and search capabilities
-    \item \textbf{commit/page.js}: Certificate commitment and validation interface
-\end{itemize}
-
-\subsubsection{Utility Modules (utils/)}
-
-\begin{itemize}
-    \item \textbf{crypto.js}: Client-side cryptographic utilities including key generation, signing, and certificate validation using Web Crypto API
-    \item \textbf{pemUtils.js}: PEM format parsing and manipulation utilities for certificate and key handling
-\end{itemize}
-
-\subsubsection{Configuration Files}
-
-\begin{itemize}
-    \item \textbf{package.json}: Node.js dependencies and build scripts
-    \item \textbf{next.config.mjs}: Next.js configuration including build optimizations and deployment settings
-    \item \textbf{postcss.config.mjs}: PostCSS configuration for Tailwind CSS processing
-    \item \textbf{jsconfig.json}: JavaScript/TypeScript configuration for IDE support
-    \item \textbf{Dockerfile}: Frontend container build configuration
-\end{itemize}
-
-\subsubsection{Static Assets (public/)}
-
-\begin{itemize}
-    \item \textbf{*.svg}: UI icons and graphics including Next.js branding and custom icons
-\end{itemize}
-
-\subsection{Development and Deployment Support}
-
-\subsubsection{Development Certificates (dev-certs/)}
-
-\begin{itemize}
-    \item \textbf{root.pem}: CA root certificate for the trust chain. It is generated during the initial setup.
-\end{itemize}
-
-\subsubsection{Container Orchestration}
-
-\begin{itemize}
-    \item \textbf{docker-compose.yml}: Multi-container application orchestration including MongoDB, local KMS, CA server, and frontend services
-    \item \textbf{mongod.conf}: MongoDB server configuration including security settings and connection parameters
-\end{itemize}
-
-\subsection{Code Quality and Maintainability}
-
-The codebase implements several best practices for maintainability and reliability:
-
-\begin{itemize}
-    \item \textbf{Separation of Concerns}: Clear boundaries between presentation, business logic, and data layers
-    \item \textbf{Error Handling}: Comprehensive error handling with appropriate logging and user feedback
-    \item \textbf{Configuration Management}: Externalized configuration through environment variables
-    \item \textbf{Security Practices}: Input validation, secure defaults, and defense-in-depth implementation
-    \item \textbf{Documentation}: Inline code comments and comprehensive API documentation
-    \item \textbf{Testing Support}: Structure conducive to unit testing and integration testing
-\end{itemize}
-
-This code structure provides a solid foundation for a production-ready Certificate Authority system while maintaining flexibility for future enhancements and scaling requirements.
+Cryptographic operations rely primarily on standard library implementations 
+and certified hardware modules rather than third-party cryptographic libraries, 
+ensuring compliance with security standards and reducing implementation risks.
