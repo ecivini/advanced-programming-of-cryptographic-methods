@@ -10,6 +10,7 @@ export default function CertsPage() {
   const [certificateInfo, setCertificateInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [verificationStatus, setVerificationStatus] = useState(null);
 
   const certificateUploader = handleFileUpload(setCertificatePEM);
 
@@ -23,6 +24,7 @@ export default function CertsPage() {
     setIsLoading(true);
     setError(null);
     setCertificateInfo(null);
+    setVerificationStatus(null);
 
     try {
       const lines = certificatePEM.split('\n');
@@ -38,11 +40,32 @@ export default function CertsPage() {
       const hasValidFormat = certificatePEM.includes('-----BEGIN CERTIFICATE-----') && 
                            certificatePEM.includes('-----END CERTIFICATE-----');
 
-      let revocationStatus = { isRevoked: false, revocationDate: null, error: null };
+      let revocationStatus = { isRevoked: false, revocationDate: null, error: null, verified: false };
       
       // Only check revocation status if we have a serial number and valid format
       if (certInfo.serialNumber && hasValidFormat) {
         revocationStatus = await checkRevocationStatus(certInfo.serialNumber, CA_URL);
+        
+        // Set verification status for display
+        if (revocationStatus.verified && revocationStatus.verificationDetails) {
+          const { verificationDetails } = revocationStatus;
+          setVerificationStatus({
+            status: 'VERIFIED',
+            message: 'Certificate status verified from CA',
+            details: [
+              `Algorithm: ${verificationDetails.algorithm}`,
+              `Responder: ${verificationDetails.responder}`,
+              `Timestamp: ${verificationDetails.timestamp}`,
+              `Nonce: ${verificationDetails.nonce}`
+            ]
+          });
+        } else if (revocationStatus.error) {
+          setVerificationStatus({
+            status: 'FAILED',
+            message: revocationStatus.error,
+            details: []
+          });
+        }
       }
 
       // Check if certificate is currently valid (not expired)
@@ -180,6 +203,55 @@ export default function CertsPage() {
         {/* Certificate Information */}
         <div className="card p-6">
           <h2 className="text-xl font-semibold text-slate-800 mb-4">Certificate Information</h2>
+          
+          {/* CA Verification Status */}
+          {verificationStatus && (
+            <div className={`mb-6 p-4 rounded-lg border ${
+              verificationStatus.status === 'VERIFIED' 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center mb-2">
+                {verificationStatus.status === 'VERIFIED' ? (
+                  <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                <span className={`font-medium text-sm ${
+                  verificationStatus.status === 'VERIFIED' ? 'text-green-800' : 'text-red-800'
+                }`}>
+                  CA Response {verificationStatus.status}
+                </span>
+              </div>
+              <p className={`text-sm ${
+                verificationStatus.status === 'VERIFIED' ? 'text-green-700' : 'text-red-700'
+              }`}>
+                {verificationStatus.message}
+              </p>
+              {verificationStatus.details.length > 0 && (
+                <div className="mt-2">
+                  <details className="text-xs">
+                    <summary className={`cursor-pointer ${
+                      verificationStatus.status === 'VERIFIED' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      Verification Details
+                    </summary>
+                    <ul className={`mt-1 ml-4 ${
+                      verificationStatus.status === 'VERIFIED' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {verificationStatus.details.map((detail, index) => (
+                        <li key={index}>• {detail}</li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              )}
+            </div>
+          )}
           
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg mb-4">

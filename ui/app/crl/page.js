@@ -9,15 +9,20 @@ export default function CrlPage() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(100);
   const [hasMore, setHasMore] = useState(true);
+  const [verificationStatus, setVerificationStatus] = useState(null);
 
   useEffect(() => {
     const fetchCRL = async () => {
       try {
         setLoading(true);
         setError(null);
+        setVerificationStatus(null);
+        
+        // Import verification utilities
+        const { verifyCRLResponse, validateNonce, generateNonce, createVerificationSummary } = await import('../utils/ca-verification');
         
         // Generate required nonce and timestamp for signed responses
-        const nonce = crypto.getRandomValues(new Uint32Array(1))[0];
+        const nonce = generateNonce();
         const timestamp = new Date().toISOString();
         const crlURL = `${CA_URL}/v1/crl?`;
         const body = JSON.stringify({
@@ -49,13 +54,26 @@ export default function CrlPage() {
         
         const data = await res.json();
         
+        // Verify the CA response signature and authenticity
+        const verificationResult = await verifyCRLResponse(data);
+        const verificationSummary = createVerificationSummary(verificationResult);
+        setVerificationStatus(verificationSummary);
+        
+        if (!verificationResult.isValid) {
+          throw new Error(`CA response verification failed: ${verificationResult.error}`);
+        }
+        
+        // Validate nonce matches our request
+        try {
+          validateNonce(verificationResult.responseData.nonce, nonce);
+        } catch (nonceError) {
+          throw new Error(`Nonce validation failed: ${nonceError.message}`);
+        }
+        
         // Backend returns a signed response with structure: {response_data: {revoked_certificates: [...]}}
         let certificates = [];
-        if (data.response_data && data.response_data.revoked_certificates) {
-          certificates = data.response_data.revoked_certificates;
-        } else if (Array.isArray(data)) {
-          // Fallback for direct array response
-          certificates = data;
+        if (verificationResult.responseData && verificationResult.responseData.revoked_certificates) {
+          certificates = verificationResult.responseData.revoked_certificates;
         }
         
         if (page === 1) {
@@ -68,6 +86,11 @@ export default function CrlPage() {
         setLoading(false);
       } catch (err) {
         setError(err.message);
+        setVerificationStatus({
+          status: 'FAILED',
+          message: err.message,
+          details: []
+        });
         setLoading(false);
       }
     };
@@ -115,6 +138,55 @@ export default function CrlPage() {
       </div>
 
       <div className="card p-10">
+        {/* CA Verification Status */}
+        {verificationStatus && (
+          <div className={`mb-6 p-4 rounded-lg border ${
+            verificationStatus.status === 'VERIFIED' 
+              ? 'bg-green-50 border-green-200' 
+              : 'bg-red-50 border-red-200'
+          }`}>
+            <div className="flex items-center mb-2">
+              {verificationStatus.status === 'VERIFIED' ? (
+                <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              <span className={`font-medium text-sm ${
+                verificationStatus.status === 'VERIFIED' ? 'text-green-800' : 'text-red-800'
+              }`}>
+                CA Response {verificationStatus.status}
+              </span>
+            </div>
+            <p className={`text-sm ${
+              verificationStatus.status === 'VERIFIED' ? 'text-green-700' : 'text-red-700'
+            }`}>
+              {verificationStatus.message}
+            </p>
+            {verificationStatus.details.length > 0 && (
+              <div className="mt-2">
+                <details className="text-xs">
+                  <summary className={`cursor-pointer ${
+                    verificationStatus.status === 'VERIFIED' ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    Verification Details
+                  </summary>
+                  <ul className={`mt-1 ml-4 ${
+                    verificationStatus.status === 'VERIFIED' ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {verificationStatus.details.map((detail, index) => (
+                      <li key={index}>• {detail}</li>
+                    ))}
+                  </ul>
+                </details>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold text-slate-800 mb-2">Revoked Certificates</h2>

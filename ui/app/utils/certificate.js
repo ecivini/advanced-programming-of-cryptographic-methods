@@ -300,8 +300,11 @@ export function parseCertificateInfo(certificateData) {
 // Check if certificate is revoked by querying certificate status
 export async function checkRevocationStatus(serialNumber, caUrl) {
   try {
+    // Import verification utilities
+    const { verifyStatusResponse, validateNonce, generateNonce } = await import('./ca-verification');
+    
     // Generate cryptographically secure nonce and timestamp
-    const nonce = crypto.getRandomValues(new Uint32Array(1))[0];
+    const nonce = generateNonce();
     const timestamp = new Date().toISOString();
     
     // Query certificate status API with POST request and required parameters
@@ -319,28 +322,56 @@ export async function checkRevocationStatus(serialNumber, caUrl) {
     if (!res.ok) {
       // If certificate not found or other error, assume it's active (not revoked)
       console.warn('Cannot check certificate status:', res.status);
-      return { isRevoked: false, revocationDate: null, error: null };
+      return { isRevoked: false, revocationDate: null, error: null, verified: false };
     }
     
     const statusData = await res.json();
     
-    // Parse the signed response to get the actual status
-    const responseData = statusData.response_data;
-    if (!responseData) {
-      console.warn('Invalid status response format');
-      return { isRevoked: false, revocationDate: null, error: 'Invalid response format' };
+    // Verify the CA response signature and authenticity
+    const verificationResult = await verifyStatusResponse(statusData);
+    
+    if (!verificationResult.isValid) {
+      console.error('CA response verification failed:', verificationResult.error);
+      return { 
+        isRevoked: false, 
+        revocationDate: null, 
+        error: `CA response verification failed: ${verificationResult.error}`,
+        verified: false
+      };
     }
     
+    // Validate nonce matches our request
+    try {
+      validateNonce(verificationResult.responseData.nonce, nonce);
+    } catch (nonceError) {
+      console.error('Nonce validation failed:', nonceError.message);
+      return { 
+        isRevoked: false, 
+        revocationDate: null, 
+        error: `Nonce validation failed: ${nonceError.message}`,
+        verified: false
+      };
+    }
+    
+    const responseData = verificationResult.responseData;
+    
     // Check if the certificate has revocation flag set
-    console.log('Certificate status response:', responseData);
+    console.log('Verified certificate status response:', responseData);
     return { 
       isRevoked: responseData.cert_status === 'revoked',
       revocationDate: responseData.revocation_time || null,
-      error: null 
+      error: null,
+      verified: true,
+      verificationDetails: verificationResult.verificationDetails
     };
   } catch (error) {
     // If there's an error, assume certificate is active (not revoked)
     console.warn('Error checking certificate status:', error);
-    return { isRevoked: false, revocationDate: null, error: null };
+    return { 
+      isRevoked: false, 
+      revocationDate: null, 
+      error: error.message,
+      verified: false
+    };
   }
 }
