@@ -1,15 +1,5 @@
 // Shared cryptographic utilities for certificate operations
 
-// Detect key type and size from PEM
-export function detectKeyType(pem) {
-  const b64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const byteLen = (b64.length * 3) / 4;
-  if (/-----BEGIN EC PRIVATE KEY-----/.test(pem)) return 'ECDSA';
-  if (byteLen > 4000) return 'RSA_4096';
-  if (byteLen > 300) return 'RSA_2048';
-  return 'ECDSA';
-}
-
 // Convert PKCS#1 (traditional RSA) to PKCS#8
 export function convertPKCS1toPKCS8(pkcs1) {
   const version = Uint8Array.from([0x02, 0x01, 0x00]);
@@ -93,21 +83,22 @@ export async function importPrivateKey(pem) {
       false, ['sign']
     );
   }
-  if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
+  else if (/-----BEGIN RSA PRIVATE KEY-----/.test(pem)) {
     const pkcs8 = convertPKCS1toPKCS8(bin);
     return crypto.subtle.importKey(
       'pkcs8', pkcs8.buffer,
       { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
       false, ['sign']
     );
+  } else if (/-----BEGIN PRIVATE KEY-----/.test(pem)) {
+    return crypto.subtle.importKey(
+      'pkcs8',  bin.buffer,
+      { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } },
+      false, ['sign']
+    );
   }
-  const alg = detectKeyType(pem).startsWith('ECDSA')
-    ? { name: 'ECDSA', namedCurve: 'P-256' }
-    : { name: 'RSASSA-PKCS1-v1_5', hash: { name: 'SHA-256' } };
-  return crypto.subtle.importKey(
-    'pkcs8', bin.buffer,
-    alg, false, ['sign']
-  );
+
+  return null;
 }
 
 // Sign the base64 challenge and return properly encoded signature

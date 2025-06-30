@@ -5,7 +5,6 @@ import { CA_URL } from '../utils/constants';
 export default function CommitPage() {
   const [email, setEmail] = useState('');
   const [pubkey, setPubkey] = useState('');
-  const [keyType, setKeyType] = useState('ECDSA'); 
   const [status, setStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -15,12 +14,6 @@ export default function CommitPage() {
     setStatus('Submitting...');
     
     try {
-      if (keyType !== 'ECDSA' && keyType !== 'RSA_2048' && keyType !== 'RSA_4096') {
-        setStatus('Error: Invalid key type selected.');
-        setIsLoading(false);
-        return;
-      }
-      
       const IdUrl = CA_URL + '/v1/identity';
       const res = await fetch(IdUrl, {
         method: 'PUT',
@@ -28,7 +21,6 @@ export default function CommitPage() {
         body: JSON.stringify({
           email,
           public_key: pubkey,
-          key_type: keyType,
         }),
       });
       
@@ -110,21 +102,6 @@ export default function CommitPage() {
               />
             </div>
             <p className="text-sm text-slate-500 mt-2">Paste your PEM-encoded public key here, including the BEGIN/END lines.</p>
-          </div>
-
-          <div>
-            <label className="label">Key Type</label>
-            <select
-              required
-              className="input"
-              value={keyType}
-              onChange={e => setKeyType(e.target.value)}
-            >
-              <option value="ECDSA">ECDSA (P-256)</option>
-              <option value="RSA_2048">RSA 2048</option>
-              <option value="RSA_4096">RSA 4096</option>
-            </select>
-            <p className="text-sm text-slate-500 mt-2">Select the algorithm that matches your public key</p>
           </div>
 
           <button

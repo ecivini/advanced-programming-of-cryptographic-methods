@@ -11,15 +11,8 @@ import (
 	"math/big"
 	"net/http"
 	"os"
-	"slices"
 	"time"
 )
-
-var SupportedKeyTypes = []string{
-	"ECDSA",
-	"RSA_2048",
-	"RSA_4096",
-}
 
 type CertificateHandler struct {
 	repo         CertificateRepository
@@ -51,7 +44,6 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	var requestBody struct {
 		Email        string `json:"email"`
 		PublicKeyPEM string `json:"public_key"`
-		KeyType      string `json:"key_type"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
@@ -66,14 +58,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	}
 	fmt.Println("[+] Validated email")
 
-	// Validate key type
-	if !slices.Contains(SupportedKeyTypes, requestBody.KeyType) {
-		handlers.ReturnErroredResponse("Provided invalid key type", &w, http.StatusBadRequest)
-		return
-	}
-	fmt.Println("[+] Validated key type ", requestBody.KeyType)
-
-	// Validate key type
+	// Validate key
 	block, _ := pem.Decode([]byte(requestBody.PublicKeyPEM))
 	publicKeyBytes := block.Bytes
 	if h.repo.ValidatePublicKey(publicKeyBytes) == nil {
@@ -83,7 +68,7 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	fmt.Println("[+] Validated public key")
 
 	// Store commitment
-	challenge := h.repo.CreateIdentityCommitment(requestBody.Email, publicKeyBytes, requestBody.KeyType)
+	challenge := h.repo.CreateIdentityCommitment(requestBody.Email, publicKeyBytes)
 
 	// Send the challenge code by email
 	_, err := h.emailService.SendChallengeEmail(requestBody.Email, challenge)

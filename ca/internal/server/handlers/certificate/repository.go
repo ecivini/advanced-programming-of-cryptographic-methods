@@ -41,7 +41,7 @@ func BuildCertificateRepository(hsm *hsm.Hsm, db *mongo.Client) CertificateRepos
 	}
 }
 
-func (repo *CertificateRepository) CreateIdentityCommitment(email string, publicKeyDer []byte, keyType string) string {
+func (repo *CertificateRepository) CreateIdentityCommitment(email string, publicKeyDer []byte) string {
 	limit := new(big.Int).Lsh(big.NewInt(1), 256)
 	serialNumber, err := rand.Int(rand.Reader, limit)
 	if err != nil {
@@ -53,7 +53,6 @@ func (repo *CertificateRepository) CreateIdentityCommitment(email string, public
 		Challenge:            GenerateChallenge(),
 		Email:                email,
 		PublicKeyDER:         publicKeyDer,
-		KeyType:              keyType,
 		ValidFrom:            bson.NewDateTimeFromTime(time.Now()),
 		ValidUntil:           bson.NewDateTimeFromTime(time.Now().Add(time.Hour * 24)), //  Commitments are valid for one day
 		Proof:                nil,
