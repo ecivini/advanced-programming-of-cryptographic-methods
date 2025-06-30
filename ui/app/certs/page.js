@@ -401,8 +401,8 @@ export default function CertsPage() {
                           'text-green-700'
                         }`}>
                           {certificateInfo.isExpired ? 'Expired' : 
-                           certificateInfo.isNotYetValid ? 'Not Yet Valid' : 
-                           'Currently Valid'}
+                          certificateInfo.isNotYetValid ? 'Not Yet Valid' : 
+                          'Currently Valid'}
                         </span>
                       </div>
                     </div>
@@ -433,36 +433,6 @@ export default function CertsPage() {
                   </button>
                 </div>
               )}
-
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-blue-800 mb-2">Format Validation</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex items-center">
-                    {certificateInfo.hasBeginMarker ? (
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                    <span className="text-blue-700">BEGIN CERTIFICATE marker</span>
-                  </div>
-                  <div className="flex items-center">
-                    {certificateInfo.hasEndMarker ? (
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                    <span className="text-blue-700">END CERTIFICATE marker</span>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>
