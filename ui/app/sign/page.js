@@ -38,10 +38,10 @@ export default function SignPage() {
       const response = await makeApiRequest(`${CA_URL}/v1/certificate`, {
         signature: signature, 
         challenge: challengeTrimmed 
-      }, 'PUT', false); // expect text response (PEM certificate)
+      }, 'PUT', true);
 
       // The API function now returns the certificate text directly
-      setCertificate(response);
+      setCertificate(response.certificate);
       setStatus('✅ Certificate generated successfully!');
     } catch (error) {
       console.error('Certificate signing error:', error);
