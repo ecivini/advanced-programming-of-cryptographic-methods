@@ -89,6 +89,8 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 		Challenge    string `json:"challenge"`
 	}
 
+	const genericErrorMessage = "Unable to generate certificate"
+
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		handlers.ReturnErroredResponse("Invalid request format", &w, http.StatusBadRequest)
 		return
@@ -96,7 +98,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 
 	signatureBytes, err := base64.StdEncoding.DecodeString(requestBody.SignatureB64)
 	if err != nil {
-		handlers.ReturnErroredResponse("Unable to decode signature", &w, http.StatusBadRequest)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
@@ -107,20 +109,23 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 
 	committedIdentity := h.repo.GetCommitmentFromChallenge(requestBody.Challenge)
 	if committedIdentity == nil {
-		handlers.ReturnErroredResponse("No identity commitment found", &w, http.StatusBadRequest)
+		log.Println("[-] Unable to retrieve identity commitment for challenge: ", requestBody.Challenge)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
 	// Check identity commitment is valid
 	now := time.Now()
 	if committedIdentity.ValidUntil.Time().Before(now) {
-		handlers.ReturnErroredResponse("Identity commitment expired", &w, http.StatusBadRequest)
+		log.Println("[-] Identity commitment expired for challenge: ", requestBody.Challenge)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
 	// Check if challenge has been used
 	if committedIdentity.Proof != nil {
-		handlers.ReturnErroredResponse("Challenge already used", &w, http.StatusBadRequest)
+		log.Println("[-] Challenge already used for challenge: ", requestBody.Challenge)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
@@ -128,14 +133,16 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 
 	publicKey := h.repo.ValidatePublicKey(committedIdentity.PublicKeyDER)
 	if publicKey == nil {
-		handlers.ReturnErroredResponse("Unable to validate public key", &w, http.StatusInternalServerError)
+		log.Println("[-] Invalid public key for challenge: ", requestBody.Challenge)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 
 	// Verify signature against the raw challenge bytes
 	signatureValid := h.repo.verifySignature(challenge, signatureBytes, committedIdentity.PublicKeyDER)
 	if !signatureValid {
-		handlers.ReturnErroredResponse("Invalid signature", &w, http.StatusBadRequest)
+		log.Printf("[-] Invalid signature [%s] for challenge: %s", requestBody.SignatureB64, requestBody.Challenge)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 	// Store signature so that it is passed to CreateCertificate
@@ -147,7 +154,7 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	certificate, err := h.repo.CreateCertificate(committedIdentity, publicKey, serialNumber, nil, nil)
 	if err != nil {
 		fmt.Println("[-] Unable to create certificate: ", err)
-		handlers.ReturnErroredResponse("Failed to generate certificate", &w, http.StatusInternalServerError)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 
@@ -161,24 +168,35 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 
 func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
-		Signature string `json:"signature"`
+		Signature    string `json:"signature"`
+		SerialNumber string `json:"serial_number"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		handlers.ReturnErroredResponse("Invalid request payload", &w, http.StatusBadRequest)
 		return
 	}
 
+	const genericErrorMessage = "Unable to revoke certificate"
 	signature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
 	if err != nil {
-		handlers.ReturnErroredResponse("Unable to parse signature", &w, http.StatusBadRequest)
+		log.Println("[-] Unable to parse signature: ", err)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
 	// Retrieve identity commitment based on the serial number
-	serialNumber := r.PathValue("serial")
+	serialNumber := requestBody.SerialNumber
 	commitment := h.repo.GetCommitmentFromReservedSerialNumber(serialNumber)
 	if commitment == nil {
-		handlers.ReturnErroredResponse("Invalid serial number", &w, http.StatusBadRequest)
+		log.Println("[-] Unable to retrieve identity commitment for serial number: ", serialNumber)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
+		return
+	}
+
+	// Check if the certificate is already revoked
+	if h.repo.IsCertificateRevoked(serialNumber) {
+		log.Println("[-] Certificate is already revoked for serial number: ", serialNumber)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
@@ -187,13 +205,15 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	message := []byte("Revoke: " + serialNumber)
 	signatureValid := h.repo.verifySignature(message, signature, commitment.PublicKeyDER)
 	if !signatureValid {
-		handlers.ReturnErroredResponse("Invalid signature", &w, http.StatusBadRequest)
+		log.Println("[-] Invalid signature for serial number: ", serialNumber)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
 	//Revoke certificate
 	if err := h.repo.RevokeCertificate(serialNumber); err != nil {
-		handlers.ReturnErroredResponse("Failed to revoke certificate", &w, http.StatusInternalServerError)
+		log.Println("[-] Failed to revoke certificate: ", err)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 
@@ -207,37 +227,43 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 
 func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
-		Signature string `json:"signature"`
+		Signature    string `json:"signature"`
+		SerialNumber string `json:"serial_number"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		handlers.ReturnErroredResponse("Invalid request payload", &w, http.StatusBadRequest)
 		return
 	}
 
+	const genericErrorMessage = "Unable to renew certificate"
 	signature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
 	if err != nil {
-		handlers.ReturnErroredResponse("Unable to parse signature", &w, http.StatusBadRequest)
+		log.Println("[-] Unable to parse signature: ", err)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
 	// Retrieve identity commitment based on the serial number
-	serialNumber := r.PathValue("serial")
+	serialNumber := requestBody.SerialNumber
 	certData := h.repo.GetCertificateDataFromSerialNumber(serialNumber)
 	committedIdentity := h.repo.GetCommitmentFromReservedSerialNumber(serialNumber)
 	if committedIdentity == nil || certData == nil {
-		handlers.ReturnErroredResponse("Invalid serial number", &w, http.StatusBadRequest)
+		log.Println("[-] Unable to retrieve identity commitment or certificate data for serial number: ", serialNumber)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
 	// Check if the certificate is revoked
 	if certData.Revoked {
-		handlers.ReturnErroredResponse("Certificate is revoked", &w, http.StatusBadRequest)
+		log.Println("[-] Certificate is revoked for serial number: ", serialNumber)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 	// Check if the certificate is still valid
 	now := time.Now()
 	if certData.ValidUntil.Time().Before(now) {
-		handlers.ReturnErroredResponse("Certificate has expired", &w, http.StatusBadRequest)
+		log.Println("[-] Certificate has expired for serial number: ", serialNumber)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
@@ -246,14 +272,16 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 	message := []byte("Renew: " + serialNumber)
 	signatureValid := h.repo.verifySignature(message, signature, committedIdentity.PublicKeyDER)
 	if !signatureValid {
-		handlers.ReturnErroredResponse("Invalid signature", &w, http.StatusBadRequest)
+		log.Println("[-] Invalid signature for renewing serial number: ", serialNumber)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
 	// Update certificate data in DB
 	newExpiryDate := certData.ValidUntil.Time().Add(time.Hour * 24 * 365) // Renew for one year
 	if err := h.repo.RenewCertificate(serialNumber, newExpiryDate); err != nil {
-		handlers.ReturnErroredResponse("Failed to revoke certificate", &w, http.StatusInternalServerError)
+		log.Println("[-] Failed to renew certificate: ", err)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 
@@ -269,13 +297,13 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 	)
 	if err != nil {
 		fmt.Println("[-] Unable to renew certificate: ", err)
-		handlers.ReturnErroredResponse("Failed to renew certificate", &w, http.StatusInternalServerError)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 
 	//Response
 	response := map[string]string{
-		"message":     "Certificate renew successfully",
+		"message":     "Certificate renewed successfully",
 		"certificate": string(certificate),
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -290,9 +318,12 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 		return
 	}
 
+	const genericErrorMessage = "Unable to retrieve certificate status"
+
 	// Validate nonce and timestamp for replay protection
 	if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
-		handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
+		log.Println("[-] Nonce validation failed: ", err)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
@@ -310,7 +341,8 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 
 		signedResponse, err := h.responseSigner.SignStatusResponse(responseData)
 		if err != nil {
-			handlers.ReturnErroredResponse("Failed to sign response", &w, http.StatusInternalServerError)
+			log.Println("[-] Failed to sign unknown status response:", err)
+			handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 			return
 		}
 
@@ -348,7 +380,7 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 	signedResponse, err := h.responseSigner.SignStatusResponse(responseData)
 	if err != nil {
 		fmt.Printf("[-] Failed to sign status response: %v\n", err)
-		handlers.ReturnErroredResponse("Failed to sign response", &w, http.StatusInternalServerError)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 
@@ -381,9 +413,12 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		return
 	}
 
+	const genericErrorMessage = "Unable to retrieve revocation list"
+
 	// Validate nonce and timestamp
 	if err := h.nonceManager.ValidateAndUseNonce(request.Nonce, request.Timestamp); err != nil {
-		handlers.ReturnErroredResponse(fmt.Sprintf("Nonce validation failed: %v", err), &w, http.StatusBadRequest)
+		log.Println("[-] Nonce validation failed:", err)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusBadRequest)
 		return
 	}
 
@@ -391,7 +426,7 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 	revokedCertificates, err := h.repo.GetRevokedCertificates(request.Page, request.PageSize)
 	if err != nil {
 		fmt.Println("[-] Failed to retrieve revocation list:", err)
-		handlers.ReturnErroredResponse("Failed to retrieve revocation list", &w, http.StatusInternalServerError)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 
@@ -425,7 +460,7 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 	signedResponse, err := h.responseSigner.SignRevocationListResponse(responseData)
 	if err != nil {
 		fmt.Printf("[-] Failed to sign revocation list response: %v\n", err)
-		handlers.ReturnErroredResponse("Failed to sign response", &w, http.StatusInternalServerError)
+		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return
 	}
 

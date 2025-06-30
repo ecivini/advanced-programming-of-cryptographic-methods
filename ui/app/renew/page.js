@@ -53,8 +53,9 @@ export default function RenewPage() {
       const signature = await signMessage(privateKey, renewalMessage);
 
       // Send renewal request to CA
-      const result = await makeApiRequest(`${CA_URL}/v1/certificate/${serialNumber}/renew`, {
-        signature: signature
+      const result = await makeApiRequest(`${CA_URL}/v1/certificate/renew`, {
+        signature: signature,
+        serial_number: serialNumber,
       }, 'POST', true); // expect JSON response
 
       setNewCertificate(result.certificate);

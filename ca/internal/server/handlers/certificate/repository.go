@@ -190,6 +190,21 @@ func (repo *CertificateRepository) GetCommitmentFromReservedSerialNumber(serial 
 	return commitment
 }
 
+func (repo *CertificateRepository) IsCertificateRevoked(serial string) bool {
+	// Check if the certificate is revoked by querying the database
+	certificateData, err := db.RetrieveCertificateData(repo.db, serial)
+	if err != nil {
+		fmt.Println("[-] Unable to retrieve certificate data: ", err)
+		return false
+	}
+	if certificateData == nil {
+		fmt.Println("[-] Certificate data not found for serial number: ", serial)
+		return false
+	}
+
+	return certificateData.Revoked
+}
+
 func (repo *CertificateRepository) GetCertificateDataFromSerialNumber(serial string) *db.CertificateData {
 	data, err := db.RetrieveCertificateDataFromSerial(repo.db, serial)
 
@@ -316,10 +331,10 @@ func (repo *CertificateRepository) ValidatePublicKey(publicKey []byte) crypto.Pu
 			return nil
 		}
 		return key
+	default:
+		log.Printf("[-] Unsupported public key type: %T", pub)
+		return nil
 	}
-
-	log.Printf("[-] Unsupported public key type: %T", pub)
-	return nil
 }
 
 func GenerateChallenge() string {

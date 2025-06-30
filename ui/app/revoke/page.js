@@ -52,8 +52,9 @@ export default function RevokePage() {
       const signature = await signMessage(privateKey, revocationMessage);
 
       // Send revocation request to CA
-      await makeApiRequest(`${CA_URL}/v1/certificate/${serialNumber}/revoke`, {
-        signature: signature
+      await makeApiRequest(`${CA_URL}/v1/certificate/revoke`, {
+        signature: signature,
+        serial_number: serialNumber,
       }, 'POST', true); // expect JSON response
 
       setSuccess(true);
