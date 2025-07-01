@@ -246,20 +246,30 @@ The process starts with the identity commitment flow, where the frontend sends a
 `/v1/identity` containing the user's email, public key in PEM format, and 
 selected key type. The backend responds with an HTTP 200 status upon successful 
 commitment creation, triggering the email verification process.
-
 Then, once the use has received the challenge via email and wrote it into the `Sign` section
 together with the associate private key, the frontend computes the required signature and submits 
 a POST request to `/v1/certificate` with the challenge string and signature. 
 The backend validates the signature and returns the signed certificate in PEM format.
-
+\begin{figure}[h!]
+    \centering
+    \includegraphics[keepaspectratio, width=\textwidth]{Pic/create_certificate.pdf}
+    \caption{Identity commitment and certificate generation flow}
+    \label{fig:certificate-creation-flow}
+\end{figure}
 When a user wants to revoke a certificate, the frontend sends a POST request to 
 `/v1/certificate/revoke` containing the revocation signature. The backend validates 
 the signature and confirms revocation through a JSON response.
 
-{\color{red}TODO: Maybe move serial parameter into payload?}
+\begin{figure}[h!]
+    \centering
+    \includegraphics[keepaspectratio, width=\textwidth]{Pic/revoke_certificate.pdf}
+    \caption{Certificate revocation flow}
+    \label{fig:certificate-revocation-flow}
+\end{figure}
+
 Similarly, when a user wants to renew a certificate, the frontend sends a POST 
-requests to `/v1/certificate/renew/{serial}` containing renewal signatures. Successful renewal 
-returns both confirmation and the renewed certificate.
+requests to `/v1/certificate/renew` containing renewal signatures and the serial number of the 
+certificate. Successful renewal returns both confirmation and the renewed certificate.
 
 \subsection{HSM integration patterns}
 
@@ -477,8 +487,6 @@ we decided to use.
 
 At the core we decided to use Next.js 15 with React 19 as it provides easy routing and
 lots of ui packages with pre-built compotents, which allowed us to speed up the development process.
-
-{\color{red}TODO: Are we using this?}
 We opted for Web Crypto API (browser native) to handle 
 client-side key generation, signing, and certificate validation without requiring 
 external cryptographic libraries.

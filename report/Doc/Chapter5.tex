@@ -4,12 +4,16 @@ Despite the project aimed at creating a certificate authority capable of issuing
 able to verify the identity of the certificate holder, we had to make some compromises due to time
 constraints, high cost of services and practicality of the implementation.
 
-{\color{red}TODO: Add limitation that Resend can only send email to a single email address.}
-
 \section{Limited identity verification}
 The current implementation uses a simplified identity verification process
 that only checks email ownership and private key possession, thus lacking a proper identity validation
 processes.
+
+\section{Limited number of email addresses}
+Due to the use of Resend.com for sending emails, the system is limited to a single email address
+for sending challenge emails. This is because the free plan of Resend.com only allows sending emails
+from their email address \textit{onboarding@resend.com} and to the email address associated to the Resend.com account.
+It is possible to use custom domains to remove this limitation, but we did not find any free solution.
 
 \section{Simplified certificates usage}
 
@@ -38,6 +42,13 @@ the signing operations across multiple HSMs.
 
 While the system implements main operations for managing X.509 standards, it lacks full compliance 
 with advanced PKI standards, in particular tries replicate RFC 5280 and RFC 6960 in a simplified way.
+
+\section{Requiring internet access for all operations}
+As our CA is implemented to be real-time, it does provide certificate revokation list files. This means 
+that it is not possible to verify the status of a certificate without access to the internet, in contrast 
+to what happens within RFC 5280, which allows to download the CRL file beforehand and verify the status 
+of a certificate without requiring internet access, since it is able to cache CRL files and use them for 
+offline verification.
 
 \section{Single-email address limitation}
 As domain providers always require a paid plan to create custom email addresses, the system is limited
