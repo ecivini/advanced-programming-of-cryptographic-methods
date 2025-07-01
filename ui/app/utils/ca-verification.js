@@ -1,8 +1,6 @@
 // CA Response Verification Utilities
 // This module provides verification for CA signed responses to ensure authenticity
 
-import { CA_URL } from './constants';
-
 // Cache for CA certificate
 let caCertificateCache = null;
 
@@ -16,7 +14,8 @@ async function getCACertificate() {
 
   try {
     // Fetch CA certificate from the info endpoint
-    const response = await fetch(`${CA_URL}/v1/info/pk`);
+    const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+    const response = await fetch(CA_URL + /v1/info/pk);
     if (!response.ok) {
       throw new Error(`Failed to fetch CA certificate: ${response.status}`);
     }

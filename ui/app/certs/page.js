@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CA_URL } from '../utils/constants';
 import { parseCertificateInfo, checkRevocationStatus } from '../utils/certificate';
 import { handleFileUpload, copyToClipboard, formatSerialNumber } from '../utils/ui';
 
@@ -14,6 +13,8 @@ export default function CertsPage() {
 
   const certificateUploader = handleFileUpload(setCertificatePEM);
 
+  const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+  
   // Parse certificate information
   const parseCertificate = async () => {
     if (!certificatePEM.trim()) {

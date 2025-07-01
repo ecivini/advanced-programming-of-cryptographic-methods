@@ -1,6 +1,5 @@
 'use client';
 import React, { useState } from 'react';
-import { CA_URL } from '../utils/constants';
 
 export default function CommitPage() {
   const [email, setEmail] = useState('');
@@ -8,6 +7,8 @@ export default function CommitPage() {
   const [status, setStatus] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);

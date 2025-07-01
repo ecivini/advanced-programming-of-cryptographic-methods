@@ -1,7 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CA_URL } from './utils/constants';
 
 export default function HomePage() {
   const [caInfo, setCaInfo] = useState(null);
@@ -9,8 +8,9 @@ export default function HomePage() {
   const [error, setError] = useState(null);
 
 useEffect(() => {
+  const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
   const caUrl = CA_URL + '/v1/info/pk';
-  // console.log(`Fetching CA info from: ${caUrl}`);
+  
   fetch(caUrl, {
     method: 'GET',
     headers: {

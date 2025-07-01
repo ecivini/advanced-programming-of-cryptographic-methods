@@ -1,6 +1,5 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { CA_URL } from '../utils/constants';
 
 export default function CrlPage() {
   const [crl, setCrl] = useState([]);
@@ -20,11 +19,11 @@ export default function CrlPage() {
         
         // Import verification utilities
         const { verifyCRLResponse, validateNonce, generateNonce, createVerificationSummary } = await import('../utils/ca-verification');
-        
+        const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
         // Generate required nonce and timestamp for signed responses
         const nonce = generateNonce();
         const timestamp = new Date().toISOString();
-        const crlURL = `${CA_URL}/v1/crl?`;
+        const crlURL = CA_URL + '/v1/crl?';
         const body = JSON.stringify({
           page: page,
           page_size: pageSize,

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CA_URL } from '../utils/constants';
 import { signMessage } from '../utils/crypto';
 import { handleFileUpload } from '../utils/ui';
 import { makeApiRequest } from '../utils/api';
@@ -52,7 +51,8 @@ export default function RevokePage() {
       const signature = await signMessage(privateKey, revocationMessage);
 
       // Send revocation request to CA
-      await makeApiRequest(`${CA_URL}/v1/certificate/revoke`, {
+      const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+      await makeApiRequest(CA_URL + '/v1/certificate/revoke', {
         signature: signature,
         serial_number: serialNumber,
       }, 'POST', true); // expect JSON response
