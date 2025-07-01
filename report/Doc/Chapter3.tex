@@ -256,10 +256,9 @@ When a user wants to revoke a certificate, the frontend sends a POST request to
 `/v1/certificate/revoke` containing the revocation signature. The backend validates 
 the signature and confirms revocation through a JSON response.
 
-{\color{red}TODO: Maybe move serial parameter into payload?}
 Similarly, when a user wants to renew a certificate, the frontend sends a POST 
-requests to `/v1/certificate/renew/{serial}` containing renewal signatures. Successful renewal 
-returns both confirmation and the renewed certificate.
+requests to `/v1/certificate/renew` containing renewal signatures and the serial number of the 
+certificate. Successful renewal returns both confirmation and the renewed certificate.
 
 \subsection{HSM integration patterns}
 
