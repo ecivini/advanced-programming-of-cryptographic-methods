@@ -246,12 +246,18 @@ The process starts with the identity commitment flow, where the frontend sends a
 `/v1/identity` containing the user's email, public key in PEM format, and 
 selected key type. The backend responds with an HTTP 200 status upon successful 
 commitment creation, triggering the email verification process.
-
 Then, once the use has received the challenge via email and wrote it into the `Sign` section
 together with the associate private key, the frontend computes the required signature and submits 
 a POST request to `/v1/certificate` with the challenge string and signature. 
 The backend validates the signature and returns the signed certificate in PEM format.
-
+\begin{center}
+    \begin{figure}[h!]
+        \centering
+        \includegraphics[keepaspectratio, width=\textwidth]{Pic/create_certificate.pdf}
+        \caption{Identity commitment and certificate generation flow}
+        \label{fig:certificate-creation-flow}
+    \end{figure}
+\end{center}
 When a user wants to revoke a certificate, the frontend sends a POST request to 
 `/v1/certificate/revoke` containing the revocation signature. The backend validates 
 the signature and confirms revocation through a JSON response.
