@@ -250,17 +250,22 @@ Then, once the use has received the challenge via email and wrote it into the `S
 together with the associate private key, the frontend computes the required signature and submits 
 a POST request to `/v1/certificate` with the challenge string and signature. 
 The backend validates the signature and returns the signed certificate in PEM format.
-\begin{center}
-    \begin{figure}[h!]
-        \centering
-        \includegraphics[keepaspectratio, width=\textwidth]{Pic/create_certificate.pdf}
-        \caption{Identity commitment and certificate generation flow}
-        \label{fig:certificate-creation-flow}
-    \end{figure}
-\end{center}
+\begin{figure}[h!]
+    \centering
+    \includegraphics[keepaspectratio, width=\textwidth]{Pic/create_certificate.pdf}
+    \caption{Identity commitment and certificate generation flow}
+    \label{fig:certificate-creation-flow}
+\end{figure}
 When a user wants to revoke a certificate, the frontend sends a POST request to 
 `/v1/certificate/revoke` containing the revocation signature. The backend validates 
 the signature and confirms revocation through a JSON response.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[keepaspectratio, width=\textwidth]{Pic/revoke_certificate.pdf}
+    \caption{Certificate revocation flow}
+    \label{fig:certificate-revocation-flow}
+\end{figure}
 
 Similarly, when a user wants to renew a certificate, the frontend sends a POST 
 requests to `/v1/certificate/renew` containing renewal signatures and the serial number of the 
