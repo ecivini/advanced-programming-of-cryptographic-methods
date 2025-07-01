@@ -1,40 +1,47 @@
 \chapter{Introduction}
 \label{ch:introduction}
-This project implements a Certificate Authority (CA) system that manages digital certificates for secure communications. 
-A CA is a trusted entity that issues digital certificates to verify the identity of users, servers, or devices in a network.
-
-The system provides a complete solution for certificate management, including issuing new certificates, checking their validity, renewing them before expiration, and revoking them when necessary. 
-
-The implementation focuses on security best practices by using Hardware Security Modules (HSMs) to protect the CA's private key and implementing proper verification procedures.
-
-The system provides user-friendly interfaces through both API endpoints for developers and a web interface for end users. 
-Additionally, it ensures system reliability by handling multiple requests efficiently while maintaining data consistency.
+This project implements a Certificate Authority (CA) system that manages digital certificates for 
+secure communications. A CA is a trusted entity that issues digital certificates to verify the identity 
+of users and the possession of a private key.
+The system provides a complete solution for certificate management, including issuing new certificates, 
+checking their validity, renewing them before expiration, and revoking them when necessary. 
+The implementation focuses on security by using an Hardware Security Module (HSMs) to protect
+the CA's private key and implementing proper verification procedures.
+The system provides user-friendly interfaces through both API endpoints for developers and a web 
+interface for end users. 
 
 \section{Key Features}
 
-The Certificate Authority system supports the complete certificate lifecycle. 
-For certificate issuance, the system processes certificate requests, verifies the requester's identity, and issues signed digital certificates. 
+The Certificate Authority supports the complete certificate lifecycle. 
+For certificate issuance, the system processes certificate requests, verifies the requester's identity, 
+and issues signed certificates. 
 It provides certificate validation by checking if certificates are valid, not expired, and haven't been revoked.
 
-The system allows users to renew their certificates before they expire and handles certificate revocation for compromised or no longer needed certificates, maintaining a Certificate Revocation List (CRL). 
-Identity verification ensures that certificate requesters own the private key and control the email address associated with their request.
+The system allows users to renew their certificates before they expire and handles certificate revocation 
+for compromised or no longer needed certificates, maintaining a Certificate Revocation List (CRL). 
+Identity verification ensures that certificate requesters own the private key and control the email 
+address associated with their request.
 
 \section{System Architecture}
 
-The system consists of several integrated components. The backend server is a Go-based API that handles all certificate operations and communicates with the database and HSM. 
+The system consists of several integrated components. The backend server is a Go API that handles 
+all certificate operations and communicates with the database and HSM. 
 A Next.js frontend application provides an easy-to-use web interface for certificate management.
 
 Data persistence is handled by MongoDB storage for certificate records, user commitments, and system data. 
-Security operations are performed by a Hardware Security Module (HSM) that stores the CA's private key and performs cryptographic operations. 
+Security operations are performed by a HSM that stores the CA's private key 
+and performs cryptographic operations. 
 An automated email service supports identity verification during certificate requests.
 
 \section{Report Structure}
 
-This report provides a comprehensive overview of the Certificate Authority system implementation. 
+This report provides a comprehensive overview of the Certificate Authority implementation. 
 Chapter 2 presents the requirements analysis and system specifications. 
 Chapter 3 details the system design and architecture. 
-Chapter 4 covers implementation details and technology choices, while Chapter 5 discusses security considerations and best practices. 
+Chapter 4 covers implementation details and technology choices, while Chapter 5 discusses security 
+considerations and best practices. 
 Finally, Chapter 6 provides deployment guidance and usage instructions.
 
-Each chapter builds upon the previous one, providing a complete understanding of the Certificate Authority system from concept to deployment.\cite{coulouris} 
+Each chapter builds upon the previous one, providing a complete understanding of the Certificate 
+Authority from idea to deployment.
 % citazione sennò latex si spacca tutto 

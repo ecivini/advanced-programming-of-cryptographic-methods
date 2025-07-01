@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CA_URL } from '../utils/constants';
 import { signChallenge } from '../utils/crypto';
 import { handleFileUpload } from '../utils/ui';
 import { makeApiRequest, parseErrorResponse } from '../utils/api';
@@ -35,13 +34,14 @@ export default function SignPage() {
       setStatus('Requesting certificate...');
 
       // Request certificate from CA
-      const response = await makeApiRequest(`${CA_URL}/v1/certificate`, {
+      const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+      const response = await makeApiRequest(CA_URL + '/v1/certificate', {
         signature: signature, 
         challenge: challengeTrimmed 
-      }, 'PUT', false); // expect text response (PEM certificate)
+      }, 'PUT', true);
 
       // The API function now returns the certificate text directly
-      setCertificate(response);
+      setCertificate(response.certificate);
       setStatus('✅ Certificate generated successfully!');
     } catch (error) {
       console.error('Certificate signing error:', error);

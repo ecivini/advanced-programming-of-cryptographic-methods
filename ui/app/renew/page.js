@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { CA_URL } from '../utils/constants';
 import { signMessage } from '../utils/crypto';
 import { handleFileUpload, downloadTextFile } from '../utils/ui';
 import { makeApiRequest } from '../utils/api';
@@ -53,8 +52,10 @@ export default function RenewPage() {
       const signature = await signMessage(privateKey, renewalMessage);
 
       // Send renewal request to CA
-      const result = await makeApiRequest(`${CA_URL}/v1/certificate/${serialNumber}/renew`, {
-        signature: signature
+      const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+      const result = await makeApiRequest(CA_URL + '/v1/cert/renew', {
+        signature: signature,
+        serial_number: serialNumber,
       }, 'POST', true); // expect JSON response
 
       setNewCertificate(result.certificate);

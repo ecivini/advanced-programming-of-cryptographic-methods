@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import { CA_URL } from '../utils/constants';
 import { parseCertificateInfo, checkRevocationStatus } from '../utils/certificate';
 import { handleFileUpload, copyToClipboard, formatSerialNumber } from '../utils/ui';
 
@@ -10,9 +9,12 @@ export default function CertsPage() {
   const [certificateInfo, setCertificateInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [verificationStatus, setVerificationStatus] = useState(null);
 
   const certificateUploader = handleFileUpload(setCertificatePEM);
 
+  const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+  
   // Parse certificate information
   const parseCertificate = async () => {
     if (!certificatePEM.trim()) {
@@ -23,6 +25,7 @@ export default function CertsPage() {
     setIsLoading(true);
     setError(null);
     setCertificateInfo(null);
+    setVerificationStatus(null);
 
     try {
       const lines = certificatePEM.split('\n');
@@ -38,14 +41,35 @@ export default function CertsPage() {
       const hasValidFormat = certificatePEM.includes('-----BEGIN CERTIFICATE-----') && 
                            certificatePEM.includes('-----END CERTIFICATE-----');
 
-      let revocationStatus = { isRevoked: false, revocationDate: null, error: null };
+      let revocationStatus = { isRevoked: false, revocationDate: null, error: null, verified: false };
       
       // Only check revocation status if we have a serial number and valid format
       if (certInfo.serialNumber && hasValidFormat) {
         revocationStatus = await checkRevocationStatus(certInfo.serialNumber, CA_URL);
+        
+        // Set verification status for display
+        if (revocationStatus.verified && revocationStatus.verificationDetails) {
+          const { verificationDetails } = revocationStatus;
+          setVerificationStatus({
+            status: 'VERIFIED',
+            message: 'Certificate status verified from CA',
+            details: [
+              `Algorithm: ${verificationDetails.algorithm}`,
+              `Responder: ${verificationDetails.responder}`,
+              `Timestamp: ${verificationDetails.timestamp}`,
+              `Nonce: ${verificationDetails.nonce}`
+            ]
+          });
+        } else if (revocationStatus.error) {
+          setVerificationStatus({
+            status: 'FAILED',
+            message: revocationStatus.error,
+            details: []
+          });
+        }
       }
 
-      // Check if certificate is currently valid (not expired)
+      // Check if certificate is currently valid (not expired) - but revoked certificates are never valid
       const now = new Date();
       const isExpired = certInfo.notAfter && now > certInfo.notAfter;
       const isNotYetValid = certInfo.notBefore && now < certInfo.notBefore;
@@ -179,7 +203,34 @@ export default function CertsPage() {
 
         {/* Certificate Information */}
         <div className="card p-6">
-          <h2 className="text-xl font-semibold text-slate-800 mb-4">Certificate Information</h2>
+          <div className="flex items-center mb-4">
+            <h2 className="text-xl font-semibold text-slate-800">Certificate Information</h2>
+            {verificationStatus && verificationStatus.status === 'VERIFIED' && (
+              <div className="flex items-center ml-3">
+                <svg className="w-5 h-5 text-green-600 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-green-700 text-sm font-medium">CA Verified</span>
+              </div>
+            )}
+          </div>
+          
+          {/* CA Verification Status - Only show error banners */}
+          {verificationStatus && verificationStatus.status === 'FAILED' && (
+            <div className="mb-6 p-4 rounded-lg border bg-red-50 border-red-200">
+              <div className="flex items-center mb-2">
+                <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium text-sm text-red-800">
+                  CA Response FAILED
+                </span>
+              </div>
+              <p className="text-sm text-red-700">
+                {verificationStatus.message}
+              </p>
+            </div>
+          )}
           
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg mb-4">
@@ -266,7 +317,7 @@ export default function CertsPage() {
 
               {/* Serial Number Display */}
               {certificateInfo.serialNumber && (
-                <div className="bg-slate-50 p-4 rounded-lg">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-sm font-medium text-slate-600">Serial Number</label>
                     <button
@@ -286,10 +337,12 @@ export default function CertsPage() {
                 </div>
               )}
 
-              {/* Validity Period Display */}
-              {(certificateInfo.notBefore || certificateInfo.notAfter) && (
+              {/* Validity Period Display - Show for all certificates with appropriate dates */}
+              {(certificateInfo.notBefore || certificateInfo.notAfter || certificateInfo.revocationDate) && (
                 <div className="bg-slate-50 p-4 rounded-lg">
-                  <label className="text-sm font-medium text-slate-600 block mb-3">Validity Period</label>
+                  <label className="text-sm font-medium text-slate-600 block mb-3">
+                    {certificateInfo.isRevoked ? 'Validity Period (Before Revocation)' : 'Validity Period'}
+                  </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {certificateInfo.notBefore && (
                       <div>
@@ -304,33 +357,45 @@ export default function CertsPage() {
                         </div>
                       </div>
                     )}
-                    {certificateInfo.notAfter && (
+                    {/* For revoked certificates, show revocation date as end date. For others, show notAfter */}
+                    {(certificateInfo.isRevoked ? certificateInfo.revocationDate : certificateInfo.notAfter) && (
                       <div>
-                        <label className="text-xs font-medium text-slate-500 block mb-1">Valid Until </label>
+                        <label className="text-xs font-medium text-slate-500 block mb-1">
+                          {certificateInfo.isRevoked ? 'Valid Until (Revoked)' : 'Valid Until'}
+                        </label>
                         <div className="flex items-center">
                           <svg className="w-4 h-4 text-slate-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                           </svg>
-                          <p className={`text-sm ${certificateInfo.isExpired ? 'text-red-700 font-medium' : 'text-slate-800'}`}>
-                            {certificateInfo.notAfter.toLocaleString()}
+                          <p className={`text-sm ${
+                            certificateInfo.isRevoked ? 'text-red-700 font-medium' : 
+                            certificateInfo.isExpired ? 'text-red-700 font-medium' : 
+                            'text-slate-800'
+                          }`}>
+                            {certificateInfo.isRevoked 
+                              ? new Date(certificateInfo.revocationDate).toLocaleString()
+                              : certificateInfo.notAfter.toLocaleString()
+                            }
                           </p>
                         </div>
                       </div>
                     )}
                   </div>
                   {/* Validity status indicator */}
-                  {certificateInfo.notBefore && certificateInfo.notAfter && (
+                  {(certificateInfo.notBefore && (certificateInfo.notAfter || certificateInfo.revocationDate)) && (
                     <div className="mt-3 pt-3 border-t border-slate-200">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-slate-500">Validity Status:</span>
                         <span className={`font-medium ${
+                          certificateInfo.isRevoked ? 'text-red-700' :
                           certificateInfo.isExpired ? 'text-red-700' : 
                           certificateInfo.isNotYetValid ? 'text-yellow-700' : 
                           'text-green-700'
                         }`}>
-                          {certificateInfo.isExpired ? 'Expired' : 
-                           certificateInfo.isNotYetValid ? 'Not Yet Valid' : 
-                           'Currently Valid'}
+                          {certificateInfo.isRevoked ? 'Revoked' :
+                          certificateInfo.isExpired ? 'Expired' : 
+                          certificateInfo.isNotYetValid ? 'Not Yet Valid' : 
+                          'Currently Valid'}
                         </span>
                       </div>
                     </div>
@@ -361,36 +426,6 @@ export default function CertsPage() {
                   </button>
                 </div>
               )}
-
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-blue-800 mb-2">Format Validation</h3>
-                <div className="space-y-1 text-sm">
-                  <div className="flex items-center">
-                    {certificateInfo.hasBeginMarker ? (
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                    <span className="text-blue-700">BEGIN CERTIFICATE marker</span>
-                  </div>
-                  <div className="flex items-center">
-                    {certificateInfo.hasEndMarker ? (
-                      <svg className="w-4 h-4 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4 text-red-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    )}
-                    <span className="text-blue-700">END CERTIFICATE marker</span>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </div>

@@ -9,7 +9,6 @@ type IdentityCommitment struct {
 	Challenge            string        `bson:"challenge,nonempty"`
 	Email                string        `bson:"email,nonempty"`
 	PublicKeyDER         []byte        `bson:"public_key_der,nonempty"`
-	KeyType              string        `bson:"key_type,nonempty"`
 	ValidFrom            bson.DateTime `bson:"valid_from,nonempty"`
 	ValidUntil           bson.DateTime `bson:"valid_until,nonempty"`
 	Proof                []byte        `bson:"proof,omitempty"`

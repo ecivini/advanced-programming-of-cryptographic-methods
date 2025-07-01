@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { CA_URL } from '../utils/constants';
+import { signedResponseIsValid } from '../utils/certificate';
+import { generateNonce } from '../utils/crypto';
 
 export default function CrlPage() {
   const [crl, setCrl] = useState([]);
@@ -9,15 +10,34 @@ export default function CrlPage() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(100);
   const [hasMore, setHasMore] = useState(true);
+  const [verificationStatus, setVerificationStatus] = useState(null);
 
   useEffect(() => {
     const fetchCRL = async () => {
       try {
         setLoading(true);
         setError(null);
+        setVerificationStatus(null);
         
-        const crlURL = `${CA_URL}/v1/crl?page=${page}&page_size=${pageSize}`;
-        const res = await fetch(crlURL);
+        // Import verification utilities
+        const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
+        // Generate required nonce and timestamp for signed responses
+        const nonce = generateNonce();
+        const timestamp = new Date().toISOString();
+        const crlURL = CA_URL + '/v1/crl?';
+        const body = JSON.stringify({
+          page: page,
+          page_size: pageSize,
+          nonce: nonce,
+          timestamp: timestamp
+        });
+        const res = await fetch(crlURL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: body,
+        });
         
         if (!res.ok) {
           if (res.status === 404) {
@@ -33,7 +53,25 @@ export default function CrlPage() {
         }
         
         const data = await res.json();
-        const certificates = Array.isArray(data) ? data : [];
+        
+        // Verify the CA response signature and authenticity
+        const responseIsValid = await signedResponseIsValid(data);
+        
+        if (!responseIsValid) {
+          throw new Error(`CA response verification failed: invalid signature`);
+        }
+        setVerificationStatus("CA response verified successfully");
+
+        // Validate nonce matches our request
+        if (nonce != data.response_data.nonce) {
+          throw new Error(`Nonce validation failed: nonce mismatch`);
+        }
+        
+        // Backend returns a signed response with structure: {response_data: {revoked_certificates: [...]}}
+        let certificates = [];
+        if (data.response_data && data.response_data.revoked_certificates) {
+          certificates = data.response_data.revoked_certificates;
+        }
         
         if (page === 1) {
           setCrl(certificates);
@@ -45,6 +83,11 @@ export default function CrlPage() {
         setLoading(false);
       } catch (err) {
         setError(err.message);
+        setVerificationStatus({
+          status: 'FAILED',
+          message: err.message,
+          details: []
+        });
         setLoading(false);
       }
     };
@@ -92,6 +135,23 @@ export default function CrlPage() {
       </div>
 
       <div className="card p-10">
+        {/* CA Verification Status - Only show error banner */}
+        {verificationStatus && verificationStatus.status === 'FAILED' && (
+          <div className="mb-6 p-4 rounded-lg border bg-red-50 border-red-200">
+            <div className="flex items-center mb-2">
+              <svg className="w-5 h-5 text-red-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium text-sm text-red-800">
+                CA Response FAILED
+              </span>
+            </div>
+            <p className="text-sm text-red-700">
+              {verificationStatus.message}
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-semibold text-slate-800 mb-2">Revoked Certificates</h2>
@@ -99,11 +159,19 @@ export default function CrlPage() {
               {crl.length === 0 ? 'No certificates have been revoked' : `${crl.length} certificate(s) revoked`}
             </p>
           </div>
-          <div className="w-10 h-10 bg-yellow-50 rounded-lg flex items-center justify-center">
-            <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
+          {verificationStatus && verificationStatus.status === 'VERIFIED' && (
+            <div className="flex items-center space-x-3">
+              <div className="text-right">
+                <p className="text-sm font-medium text-green-800">CA Response Verified</p>
+                <p className="text-xs text-green-600">Signature, nonce & timestamp validated</p>
+              </div>
+              <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          )}
         </div>
 
         {crl.length === 0 ? (

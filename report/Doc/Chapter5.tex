@@ -1,203 +1,56 @@
 \chapter{Known Limitations}
 
-This chapter provides a comprehensive analysis of the known limitations of the implemented Certificate Authority system. Understanding these limitations is crucial for proper deployment, risk assessment, and future development planning. The limitations are categorized by their nature and impact on the system's functionality and security.
+Despite the project aimed at creating a certificate authority capable of issuing X.509 certificates 
+able to verify the identity of the certificate holder, we had to make some compromises due to time
+constraints, high cost of services and practicality of the implementation.
 
-\section{Functional Limitations}
+\section{Limited identity verification}
+The current implementation uses a simplified identity verification process
+that only checks email ownership and private key possession, thus lacking a proper identity validation
+processes.
 
-\subsection{Limited Identity Verification}
+\section{Limited number of email addresses}
+Due to the use of Resend.com for sending emails, the system is limited to a single email address
+for sending challenge emails. This is because the free plan of Resend.com only allows sending emails
+from their email address \textit{onboarding@resend.com} and to the email address associated to the Resend.com account.
+It is possible to use custom domains to remove this limitation, but we did not find any free solution.
 
-\textbf{Limitation:} The current implementation uses simplified identity verification mechanisms compared to commercial Certificate Authorities.
+\section{Simplified certificates usage}
 
-\textbf{Description:} The system only verifies email ownership and private key possession, lacking the comprehensive identity validation processes used by production CAs. Real-world CAs typically perform:
+The system implements basic X.509 certificate profiles without the full range 
+of extensions and policies, for example:
 \begin{itemize}
-    \item Document-based identity verification (government IDs, business registrations)
-    \item Domain validation for web certificates
-    \item Extended validation procedures for high-assurance certificates
-    \item Physical presence verification for certain certificate types
-\end{itemize}
-
-\textbf{Impact:} This limitation reduces the trust level that can be placed in issued certificates and makes the system unsuitable for high-stakes applications requiring strong identity assurance.
-
-\textbf{Mitigation:} For production use, additional verification layers would need to be implemented, including integration with official identity verification services and document validation systems.
-
-\subsection{Simplified Certificate Profiles}
-
-\textbf{Limitation:} The system implements basic X.509 certificate profiles without the full range of extensions and policies used in production environments.
-
-\textbf{Description:} The current implementation lacks support for:
-\begin{itemize}
-    \item Certificate policy extensions
     \item Authority Information Access (AIA) extensions
     \item Subject Alternative Names (SAN) for multiple identities
-    \item Key usage constraints and extended key usage ({\color{red}{TODO: Check}})
-    \item Certificate transparency integration
-    \item Custom extension fields for specific use cases
 \end{itemize}
 
-\textbf{Impact:} Generated certificates may not be fully compatible with all applications and use cases that require specific certificate extensions or policy compliance.
+\section{Lack of revocation cause}
 
-\textbf{Mitigation:} Future development should include configurable certificate profiles and support for standard X.509 extensions based on intended use cases.
+While the CA implements a revocation mechanism to revoke certificates, it does not include
+reason codes that specify the cause of the revocation events. As a consequence, the system itself
+is not able to revoke certificate on behalf of the certificate holder.
 
-\subsection{Limited Revocation Mechanisms}
+\section{System scalability}
 
-\textbf{Limitation:} The system only implements Certificate Revocation Lists (CRL) without support for more modern revocation mechanisms.
+The system is implemented as a single-instance application without cosnidering scaling solutions, which
+would improve availability and overall security. In particular, a signficant improvement would be
+to use a clustered HSM deployment, which would allow the CA to continue operating even if one of the HSMs
+fails or is under maintenance, and to use threshold cryptography, which would allow the CA to distribute
+the signing operations across multiple HSMs.
 
-\textbf{Description:} Missing revocation features include:
-\begin{itemize}
-    \item Online Certificate Status Protocol (OCSP) support
-    \item OCSP stapling capabilities
-    \item Delta CRLs for efficient updates
-    \item Revocation reason codes and detailed status information
-    \item Automatic revocation based on compromise detection
-\end{itemize}
+\section{Standards compliance}
 
-\textbf{Impact:} Revocation checking may be slower and less efficient than modern alternatives, potentially affecting application performance and user experience.
+While the system implements main operations for managing X.509 standards, it lacks full compliance 
+with advanced PKI standards, in particular tries replicate RFC 5280 and RFC 6960 in a simplified way.
 
-\textbf{Mitigation:} OCSP implementation should be prioritized for production deployment to provide real-time revocation status checking.
+\section{Requiring internet access for all operations}
+As our CA is implemented to be real-time, it does provide certificate revokation list files. This means 
+that it is not possible to verify the status of a certificate without access to the internet, in contrast 
+to what happens within RFC 5280, which allows to download the CRL file beforehand and verify the status 
+of a certificate without requiring internet access, since it is able to cache CRL files and use them for 
+offline verification.
 
-\section{Security Limitations}
-
-\subsection{Simplified Trust Model}
-
-\textbf{Limitation:} The system implements a simplified trust model without the hierarchical certificate chains used in production PKI deployments.
-
-\textbf{Description:} Current limitations include:
-\begin{itemize}
-    \item Single-level CA hierarchy (no intermediate CAs)
-    \item No support for cross-certification
-    \item Limited policy enforcement mechanisms
-    \item No separation of duties for different certificate types
-    \item Absence of certificate path validation complexity
-\end{itemize}
-
-\textbf{Impact:} The simplified trust model may not scale to complex organizational structures or meet enterprise security requirements that demand hierarchical trust relationships.
-
-\textbf{Mitigation:} Future versions should support intermediate CAs and configurable trust hierarchies to match real-world deployment scenarios.
-
-\subsection{Key Management Limitations}
-
-\textbf{Limitation:} While HSM integration provides secure key storage, the system lacks advanced key management features found in enterprise solutions.
-
-\textbf{Description:} Current key management limitations include: ({\color{red}{TODO: Check}})
-\begin{itemize}
-    \item No automatic key rotation policies 
-    \item No support for key escrow or split knowledge
-    \item Absence of hardware attestation mechanisms
-    \item Limited integration with external key management systems
-\end{itemize}
-
-\textbf{Impact:} These limitations may affect long-term key security and disaster recovery capabilities in production environments.
-
-\textbf{Mitigation:} Implementation of comprehensive key lifecycle management policies and procedures would enhance the security posture.
-
-\section{Scalability and Performance Limitations}
-
-\subsection{Database Scalability}
-
-\textbf{Limitation:} The current MongoDB implementation may face scalability challenges under high certificate volume scenarios.
-
-\textbf{Description:} Potential scalability issues include:
-\begin{itemize}
-    \item Single database instance without sharding
-    \item Limited optimization for high-throughput certificate operations
-    \item No built-in caching mechanisms for frequently accessed data
-    \item Absence of read replicas for load distribution
-\end{itemize}
-
-\textbf{Impact:} Performance may degrade significantly under high load, potentially affecting service availability and response times.
-
-\textbf{Mitigation:} Database clustering, caching layers, and performance optimization would be necessary for high-volume production deployment.
-
-\subsection{HSM Performance Constraints}
-
-\textbf{Limitation:} Cloud HSM operations introduce latency that may limit certificate issuance throughput.
-
-\textbf{Description:} HSM-related performance limitations include: ({\color{red}{TODO: Check}})
-\begin{itemize}
-    \item Network latency for each signing operation
-    \item Limited concurrent HSM operations
-    \item No local caching of non-sensitive operations
-    \item Dependency on external HSM service availability
-    \item Potential cost implications for high-volume operations
-\end{itemize}
-
-\textbf{Impact:} Certificate issuance rates may be constrained by HSM performance, potentially creating bottlenecks during peak usage periods.
-
-\textbf{Mitigation:} Implementation of operation batching, local caching where appropriate, and HSM capacity planning would improve performance.
-
-\section{Operational Limitations}
-
-\subsection{Backup and Disaster Recovery}
-
-\textbf{Limitation:} The current implementation lacks comprehensive backup and disaster recovery procedures.
-
-\textbf{Description:} Current limitations include:
-\begin{itemize}
-    \item No automated backup procedures for certificate data
-    \item Limited disaster recovery testing and procedures
-    \item Absence of geographic redundancy
-    \item No point-in-time recovery capabilities
-    \item Limited business continuity planning
-\end{itemize}
-
-\textbf{Impact:} System failures could result in significant downtime and potential data loss, affecting service availability and trust.
-
-\textbf{Mitigation:} Development of comprehensive backup strategies and disaster recovery procedures would be essential for production deployment.
-
-\section{User Experience Limitations}
-
-\subsection{Limited User Interface Features}
-
-\textbf{Limitation:} The web interface provides basic functionality but lacks advanced features expected in modern certificate management systems.
-
-\textbf{Description:} UI limitations include:
-\begin{itemize}
-    \item Basic certificate lifecycle management
-    \item Limited search and filtering capabilities
-    \item No bulk operations support
-    \item Absence of advanced certificate analytics
-    \item Limited customization options
-    \item No mobile-responsive design optimization
-\end{itemize}
-
-\textbf{Impact:} User productivity may be limited, and the system may not meet the usability expectations of modern certificate management workflows.
-
-\textbf{Mitigation:} UI enhancement with advanced features and improved user experience design would increase system adoption and efficiency.
-
-\section{Compliance and Standards Limitations}
-
-\subsection{Standards Compliance}
-
-\textbf{Limitation:} While the system implements basic X.509 standards, it lacks full compliance with advanced PKI standards and best practices.
-
-\textbf{Description:} Standards compliance gaps include: ({\color{red}{TODO: Check}})
-\begin{itemize}
-    \item Partial RFC 5280 compliance
-    \item No Common Criteria evaluation
-    \item Limited FIPS 140-2 compliance verification
-    \item Absence of WebTrust or similar audit frameworks
-    \item No compliance with specific industry standards (e.g., CA/Browser Forum requirements)
-\end{itemize}
-
-\textbf{Impact:} The system may not be suitable for environments requiring specific compliance certifications or industry-standard validation.
-
-\textbf{Mitigation:} Comprehensive standards compliance assessment and implementation would be necessary for regulated industry deployment.
-
-\section{Future Enhancement Recommendations}
-
-To address these limitations, future development should prioritize:
-
-\begin{enumerate}
-    \item Implementation of comprehensive identity verification mechanisms
-    \item Development of hierarchical CA support and intermediate certificates
-    \item Integration of OCSP and modern revocation mechanisms
-    \item Enhancement of audit logging and compliance features
-    \item Performance optimization and scalability improvements
-    \item Development of comprehensive operational monitoring
-    \item Implementation of disaster recovery and business continuity procedures
-    \item UI/UX improvements and mobile responsiveness
-    \item API enhancement with enterprise integration features
-    \item Standards compliance assessment and implementation
-\end{enumerate}
-
-Understanding these limitations is essential for making informed decisions about deployment scenarios, risk assessment, and future development priorities. While these limitations exist, the current implementation provides a solid foundation for a Certificate Authority system that can be enhanced to meet more demanding requirements as needed.
+\section{Single-email address limitation}
+As domain providers always require a paid plan to create custom email addresses, the system is limited
+to using a single email address for sending emails, which is the default one provided by Resend.com, and
+is able to send challenge emails only to the address that is associated to the Resend.com account.
