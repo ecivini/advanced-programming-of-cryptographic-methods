@@ -1,5 +1,7 @@
 // Certificate parsing utilities for ASN.1/DER certificate parsing
 
+import { generateNonce } from "./crypto";
+
 // Polyfill for atob if not available
 function base64Decode(str) {
   if (typeof atob === 'function') {
@@ -12,6 +14,87 @@ function base64Decode(str) {
   }
   
   throw new Error('No base64 decode function available');
+}
+
+async function getCaPublicKey() {
+  const caUrl = process.env.NEXT_PUBLIC_CA_URL + '/v1/info/pk';
+  const resp = await fetch(caUrl, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+  })
+
+  if (!resp.ok) {
+    throw new Error(`Failed to fetch CA public key: ${resp.status} ${resp.statusText}`);
+  }   
+
+  const data = await resp.json();
+  const publicKeyPem = data.public_key;
+  const publicKeyBase64 = publicKeyPem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+  const publicKeyBytes = Uint8Array.fromBase64(publicKeyBase64);
+
+  console.log('CA Public Key hex:', (new Uint8Array(publicKeyBytes)).toHex());
+
+  return crypto.subtle.importKey(
+    'spki', publicKeyBytes,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true, ['verify']
+  );
+}
+
+// ref: https://jose.readthedocs.io/en/latest/
+function derToJose(der) {
+  let offset = 0;
+
+  if (der[offset++] !== 0x30) throw new Error("Invalid DER format: expected SEQUENCE");
+  const seqLen = der[offset++];
+  if (seqLen > der.length - offset) throw new Error("Invalid DER length");
+
+  if (der[offset++] !== 0x02) throw new Error("Invalid DER format: expected INTEGER for r");
+  let rLen = der[offset++];
+  let r = der.slice(offset, offset + rLen);
+  offset += rLen;
+
+  if (der[offset++] !== 0x02) throw new Error("Invalid DER format: expected INTEGER for s");
+  let sLen = der[offset++];
+  let s = der.slice(offset, offset + sLen);
+
+  // Remove leading zeroes for r and s if present (due to ASN.1 encoding)
+  while (r.length > 32 && r[0] === 0x00) r = r.slice(1);
+  while (s.length > 32 && s[0] === 0x00) s = s.slice(1);
+
+  if (r.length > 32 || s.length > 32)
+    throw new Error("r or s length is too long for P-256");
+
+  const rPadded = new Uint8Array(32);
+  const sPadded = new Uint8Array(32);
+  rPadded.set(r, 32 - r.length);
+  sPadded.set(s, 32 - s.length);
+
+  return new Uint8Array([...rPadded, ...sPadded]);
+}
+
+
+async function signedResponseIsValid(response) {
+  const caPublicKey = await getCaPublicKey();
+
+  const responseData = response.response_data;
+  const responseDataStr = JSON.stringify(responseData);
+  const responseDataEncoded = (new TextEncoder()).encode(responseDataStr);
+  const signatureBytes = Uint8Array.fromBase64(response.signature);
+  const signatureDer = derToJose(signatureBytes);
+
+  return await window.crypto.subtle.verify(
+    {
+      name: "ECDSA",
+      hash: { name: "SHA-256" },
+    },
+    caPublicKey,
+    signatureDer,
+    responseDataEncoded,
+  );
 }
 
 // Robust base64 cleaning and validation
@@ -299,10 +382,7 @@ export function parseCertificateInfo(certificateData) {
 
 // Check if certificate is revoked by querying certificate status
 export async function checkRevocationStatus(serialNumber, caUrl) {
-  try {
-    // Import verification utilities
-    const { verifyStatusResponse, validateNonce, generateNonce } = await import('./ca-verification');
-    
+  try {    
     // Generate cryptographically secure nonce and timestamp
     const nonce = generateNonce();
     const timestamp = new Date().toISOString();
@@ -328,22 +408,20 @@ export async function checkRevocationStatus(serialNumber, caUrl) {
     const statusData = await res.json();
     
     // Verify the CA response signature and authenticity
-    const verificationResult = await verifyStatusResponse(statusData);
-    
-    if (!verificationResult.isValid) {
-      console.error('CA response verification failed:', verificationResult.error);
+    const responseValid = await signedResponseIsValid(statusData);
+    if (!responseValid) {
+      console.error('CA response verification failed');
       return { 
         isRevoked: false, 
         revocationDate: null, 
-        error: `CA response verification failed: ${verificationResult.error}`,
+        error: `CA response verification failed: invalid signature`,
         verified: false
       };
     }
     
     // Validate nonce matches our request
-    try {
-      validateNonce(verificationResult.responseData.nonce, nonce);
-    } catch (nonceError) {
+    const responseData = statusData.response_data;
+    if (nonce !== responseData.nonce){
       console.error('Nonce validation failed:', nonceError.message);
       return { 
         isRevoked: false, 
@@ -353,8 +431,6 @@ export async function checkRevocationStatus(serialNumber, caUrl) {
       };
     }
     
-    const responseData = verificationResult.responseData;
-    
     // Check if the certificate has revocation flag set
     console.log('Verified certificate status response:', responseData);
     return { 
@@ -362,7 +438,7 @@ export async function checkRevocationStatus(serialNumber, caUrl) {
       revocationDate: responseData.revocation_time || null,
       error: null,
       verified: true,
-      verificationDetails: verificationResult.verificationDetails
+      verificationDetails: "Successfully verified CA response signature and nonce"
     };
   } catch (error) {
     // If there's an error, assume certificate is active (not revoked)

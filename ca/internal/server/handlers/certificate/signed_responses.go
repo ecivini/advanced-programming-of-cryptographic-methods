@@ -201,7 +201,7 @@ func (rs *ResponseSigner) SignStatusResponse(responseData *StatusResponseData) (
 		return nil, fmt.Errorf("failed to create signer: %w", err)
 	}
 
-	signature, err := signer.Sign(rand.Reader, hash[:], crypto.SHA256)
+	signature, err := signer.Sign(rand.Reader, hash[:], nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign response: %w", err)
 	}
