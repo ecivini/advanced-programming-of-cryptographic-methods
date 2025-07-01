@@ -1,5 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import { signedResponseIsValid } from '../utils/certificate';
+import { generateNonce } from '../utils/crypto';
 
 export default function CrlPage() {
   const [crl, setCrl] = useState([]);
@@ -18,7 +20,6 @@ export default function CrlPage() {
         setVerificationStatus(null);
         
         // Import verification utilities
-        const { verifyCRLResponse, validateNonce, generateNonce, createVerificationSummary } = await import('../utils/ca-verification');
         const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
         // Generate required nonce and timestamp for signed responses
         const nonce = generateNonce();
@@ -54,25 +55,22 @@ export default function CrlPage() {
         const data = await res.json();
         
         // Verify the CA response signature and authenticity
-        const verificationResult = await verifyCRLResponse(data);
-        const verificationSummary = createVerificationSummary(verificationResult);
-        setVerificationStatus(verificationSummary);
+        const responseIsValid = await signedResponseIsValid(data);
         
-        if (!verificationResult.isValid) {
-          throw new Error(`CA response verification failed: ${verificationResult.error}`);
+        if (!responseIsValid) {
+          throw new Error(`CA response verification failed: invalid signature`);
         }
-        
+        setVerificationStatus("CA response verified successfully");
+
         // Validate nonce matches our request
-        try {
-          validateNonce(verificationResult.responseData.nonce, nonce);
-        } catch (nonceError) {
-          throw new Error(`Nonce validation failed: ${nonceError.message}`);
+        if (nonce != data.response_data.nonce) {
+          throw new Error(`Nonce validation failed: nonce mismatch`);
         }
         
         // Backend returns a signed response with structure: {response_data: {revoked_certificates: [...]}}
         let certificates = [];
-        if (verificationResult.responseData && verificationResult.responseData.revoked_certificates) {
-          certificates = verificationResult.responseData.revoked_certificates;
+        if (data.response_data && data.response_data.revoked_certificates) {
+          certificates = data.response_data.revoked_certificates;
         }
         
         if (page === 1) {

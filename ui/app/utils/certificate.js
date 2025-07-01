@@ -35,8 +35,6 @@ async function getCaPublicKey() {
   const publicKeyBase64 = publicKeyPem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
   const publicKeyBytes = Uint8Array.fromBase64(publicKeyBase64);
 
-  console.log('CA Public Key hex:', (new Uint8Array(publicKeyBytes)).toHex());
-
   return crypto.subtle.importKey(
     'spki', publicKeyBytes,
     { name: 'ECDSA', namedCurve: 'P-256' },
@@ -76,8 +74,7 @@ function derToJose(der) {
   return new Uint8Array([...rPadded, ...sPadded]);
 }
 
-
-async function signedResponseIsValid(response) {
+export async function signedResponseIsValid(response) {
   const caPublicKey = await getCaPublicKey();
 
   const responseData = response.response_data;
