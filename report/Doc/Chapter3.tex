@@ -195,27 +195,28 @@ without generating new key pairs, maintaining continuity while refreshing
 the certificate's temporal validity.
 
 \subsubsection{Renewal request process}
-{\color{red}TODO: Risk of replay attack? request can be replicated}
 The renewal process requires the certificate owner to prove continued possession 
 of the private key. The client constructs a renewal message in the format 
-"Renew: $<$serial number$>$" and signs it using the certificate's private key.
-
+"Renew: $<$serial number$>$ Nonce: $<$random nonce$>$" and signs it using the certificate's 
+private key.
 This signature proves the requester still controls the private key associated 
 with the certificate, ensuring only legitimate certificate owners can renew 
-their certificates.
+their certificates. To avoid replay attacks, the renewal message includes a 
+random nonce that must be unique for each renewal request. Subsequent requests 
+for the same certificate using the same nonce will be rejected by the CA.
 
 \subsubsection{CA renewal validation and processing}
 
-The CA performs several validation steps before processing renewal requests:
-
-The system verifies the certificate exists and hasn't been revoked. It confirms 
+The CA performs several validation steps before processing renewal requests.
+First, the system verifies the certificate exists and hasn't been revoked. It confirms 
 the certificate hasn't expired, as expired certificates cannot be renewed. 
-The CA validates the renewal signature against the message "Renew: $<$serial number$>$" 
-using the certificate's public key.
-
+The, the CA validates the renewal signature against the message "Renew: $<$serial number$>$ Nonce: 
+$<$provided nonce$>$" using the certificate's public key.
 Upon successful validation, the CA extends the certificate's validity period 
 (typically by one year) and generates a new certificate with the updated expiration 
-date. The renewed certificate maintains the same serial number and subject 
+date. It also keeps track of the used nonces for this certificate to prevent 
+replay attacks.
+The renewed certificate maintains the same serial number and subject 
 information while reflecting the extended validity period.
 
 \subsubsection{HSM integration in renewal}
@@ -271,7 +272,7 @@ certificate. Successful renewal returns both confirmation and the renewed certif
     \centering
     \includegraphics[keepaspectratio, width=\textwidth]{Pic/renew_certificate.pdf}
     \caption{Certificate renewal flow}
-    \label{fig:certificate-revocation-flow}
+    \label{fig:certificate-renewal-flow}
 \end{figure}
 
 \subsection{HSM integration patterns}
