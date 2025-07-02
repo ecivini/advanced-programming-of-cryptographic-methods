@@ -43,4 +43,3 @@ signature.txt
 *.gz
 *.fdb_latexmk
 *.fls
-*.pdf
