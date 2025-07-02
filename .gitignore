@@ -40,7 +40,6 @@ signature.txt
 *.log
 *.out
 *.toc
-*.bib
 *.gz
 *.fdb_latexmk
 *.fls
