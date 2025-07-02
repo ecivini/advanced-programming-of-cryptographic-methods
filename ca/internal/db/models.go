@@ -22,4 +22,5 @@ type CertificateData struct {
 	ValidUntil     bson.DateTime `bson:"valid_until,nonempty"`
 	Revoked        bool          `bson:"revoked,nonempty"`
 	RevocationDate bson.DateTime `bson:"revocation_date,omitempty"`
+	RenewalNonces  []int         `bson:"renewal_nonces,omitempty"`
 }
