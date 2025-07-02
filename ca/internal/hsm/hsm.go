@@ -34,6 +34,22 @@ type HsmECDSASigner struct {
 	Context    context.Context
 }
 
+// ConnectToHSM establishes a connection to the AWS KMS Hardware Security Module and initializes the CA.
+// This function performs the complete HSM setup process including AWS configuration, KMS client creation,
+// root key management, and root certificate generation if needed.
+//
+// Required Environment Variables:
+//   - AWS_REGION: AWS region where the KMS service is located
+//   - KMS_ENDPOINT: Custom KMS endpoint URL (for LocalStack or custom deployments)
+//   - AWS credentials (via standard AWS credential chain)
+//
+// Returns:
+//   - Hsm: Configured HSM instance with established KMS connection and root key reference
+//
+// Panics:
+//   - If AWS configuration cannot be loaded
+//   - If KMS connection fails
+//   - If root key creation fails
 func ConnectToHSM() Hsm {
 	fmt.Println("[+] Connecting to HSM ...")
 
@@ -72,8 +88,24 @@ func ConnectToHSM() Hsm {
 	return hsm
 }
 
+// CreateRootKey generates a new root CA key in AWS KMS for certificate signing operations.
+// This function creates an ECC NIST P-256 key specifically configured for signing and verification,
+// which serves as the root private key for the entire Certificate Authority infrastructure.
+//
+// Parameters:
+//   - hsm: AWS KMS client instance for key creation operations
+//
+// Returns:
+//   - *string: Pointer to the unique KMS key identifier for the created root key
+//
+// Key Specifications:
+//   - Key Type: ECC NIST P-256 (Elliptic Curve Cryptography)
+//   - Key Usage: Sign/Verify operations only
+//   - Description: "CA ROOT KEY" for identification purposes
+//
+// Panics:
+//   - If key creation fails due to KMS service errors or permission issues
 func CreateRootKey(hsm *kms.Client) *string {
-	// TODO: Discuss the most appropriate key specs
 	keySpecs := &kms.CreateKeyInput{
 		Description: aws.String("CA ROOT KEY"),
 		KeyUsage:    types.KeyUsageTypeSignVerify,
@@ -89,6 +121,18 @@ func CreateRootKey(hsm *kms.Client) *string {
 	return result.KeyMetadata.KeyId
 }
 
+// CreateRootCertificate generates and stores the self-signed root CA certificate.
+//
+// The function performs the following operations:
+//  1. Creates an ECDSA signer using the HSM-stored root key
+//  2. Constructs a self-signed X.509 certificate with CA capabilities
+//  3. Signs the certificate using the HSM root key
+//  4. Saves the certificate to /certs/root.pem in PEM format
+//
+// Panics:
+//   - If ECDSA signer creation fails
+//   - If certificate generation fails
+//   - If file system operations fail
 func (hsm *Hsm) CreateRootCertificate() {
 	// Create signer
 	signer, err := hsm.BuildECDSASigner(context.Background())
@@ -112,7 +156,7 @@ func (hsm *Hsm) CreateRootCertificate() {
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 	}
 
-	// 6. Sign certificate with KMS
+	// Sign certificate with KMS
 	certDER, err := x509.CreateCertificate(
 		rand.Reader,
 		rootCert,
@@ -134,24 +178,42 @@ func (hsm *Hsm) CreateRootCertificate() {
 	pem.Encode(rootCertFile, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 }
 
+// GetPublicKeyPEM retrieves the public key from KMS and returns it in PEM format.
+// This method provides access to the public key material corresponding to a KMS-stored
+// private key, formatted as a standard PEM-encoded public key for distribution and use.
+//
+// Parameters:
+//   - keyId: Pointer to the KMS key identifier whose public key should be retrieved
+//
+// Returns:
+//   - string: PEM-encoded public key string ready for distribution or storage
+//   - error: nil on success, or error if key retrieval or encoding fails
 func (hsm *Hsm) GetPublicKeyPEM(keyId *string) (string, error) {
 	pubKeyDer, err := hsm.GetPublicKey(keyId)
 	if err != nil {
 		return "", errors.New("Unable to find key with id " + *keyId)
 	}
 
-	// Create a PEM block with the public key
 	pemBlock := &pem.Block{
-		Type:  "PUBLIC KEY", // This is the PEM block type
-		Bytes: pubKeyDer,    // DER bytes (we don't need to re-encode in this case)
+		Type:  "PUBLIC KEY",
+		Bytes: pubKeyDer,
 	}
 
-	// Store PEM in a variable (as a string)
 	publicKeyPem := pem.EncodeToMemory(pemBlock)
 
 	return string(publicKeyPem), nil
 }
 
+// GetPublicKey retrieves the raw DER-encoded public key bytes from AWS KMS.
+// This method provides access to the binary public key material in DER format,
+// which can be used for cryptographic operations or further encoding.
+//
+// Parameters:
+//   - keyId: Pointer to the KMS key identifier whose public key should be retrieved
+//
+// Returns:
+//   - []byte: DER-encoded public key bytes, or empty slice if key doesn't exist
+//   - error: nil on success, or error if KMS operation fails
 func (hsm *Hsm) GetPublicKey(keyId *string) ([]byte, error) {
 	publicKeyInput := &kms.GetPublicKeyInput{
 		KeyId: keyId,
@@ -166,6 +228,20 @@ func (hsm *Hsm) GetPublicKey(keyId *string) ([]byte, error) {
 	return publicKeyOutput.PublicKey, nil
 }
 
+// BuildECDSASigner creates a crypto.Signer implementation that uses AWS KMS for ECDSA operations.
+// This method constructs a signer that implements the standard Go crypto.Signer interface
+// while delegating all private key operations to the Hardware Security Module.
+//
+// Parameters:
+//   - ctx: Context for controlling the lifecycle of KMS operations
+//
+// Returns:
+//   - *HsmECDSASigner: Configured signer that implements crypto.Signer interface
+//   - error: nil on success, or error if key retrieval, parsing, or validation fails
+//
+// The returned signer:
+//   - Uses ECDSA-SHA256 signing algorithm
+//   - Delegates all private key operations to KMS
 func (hsm *Hsm) BuildECDSASigner(ctx context.Context) (*HsmECDSASigner, error) {
 	pubResp, err := hsm.Kms.GetPublicKey(ctx, &kms.GetPublicKeyInput{
 		KeyId: aws.String(*hsm.RootKeyId),
@@ -192,10 +268,29 @@ func (hsm *Hsm) BuildECDSASigner(ctx context.Context) (*HsmECDSASigner, error) {
 	}, nil
 }
 
+// Public returns the public key associated with this HSM signer.
+// This method implements the crypto.Signer interface requirement to provide
+// access to the public key corresponding to the private key stored in the HSM.
+//
+// Returns:
+//   - crypto.PublicKey: The public key that corresponds to the HSM-stored private key
 func (s *HsmECDSASigner) Public() crypto.PublicKey {
 	return s.PublicKey
 }
 
+// Sign performs ECDSA-SHA256 digital signature operations using the HSM-stored private key.
+//
+// Parameters:
+//   - rand: Random number generator
+//   - digest: Pre-computed hash digest to be signed (must be SHA-256)
+//   - opts: Signing options
+//
+// Returns:
+//   - []byte: DER-encoded ECDSA signature bytes
+//   - error: nil on success, or error if KMS signing operation fails
+//
+// The returned signature is in DER format and can be used directly with
+// standard Go cryptographic libraries and X.509 certificate operations.
 func (s *HsmECDSASigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	signOut, err := s.Hsm.Kms.Sign(s.Context, &kms.SignInput{
 		KeyId:            aws.String(*s.Hsm.RootKeyId),
@@ -210,9 +305,18 @@ func (s *HsmECDSASigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerO
 	return signOut.Signature, nil
 }
 
-// The HSM stores only the root CA key
-// If there are no keys inside it, it means that
-// the CA needs to be set up
+// getRootKeyId searches for and returns the identifier of the root CA key in KMS.
+// This internal function implements the key discovery logic for determining whether
+// a root CA key already exists or if a new CA setup is required.
+//
+// Parameters:
+//   - hsm: AWS KMS client instance for listing and querying keys
+//
+// Returns:
+//   - *string: Pointer to the root key identifier if found, nil if no keys exist
+//
+// Panics:
+//   - If KMS key listing operation fails due to service errors or permissions
 func getRootKeyId(hsm *kms.Client) *string {
 	output, err := hsm.ListKeys(context.Background(), &kms.ListKeysInput{})
 	if err != nil {
