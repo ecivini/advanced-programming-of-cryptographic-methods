@@ -12,8 +12,10 @@ type InfoHandler struct {
 	hsm *hsm.Hsm
 }
 
+// GetPublickKeyResponse represents the response structure for public key retrieval
+// @Description Response containing the public key in PEM format
 type GetPublickKeyResponse struct {
-	PublicKey string `json:"public_key"`
+	PublicKey string `json:"public_key" example:"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."`
 }
 
 func BuildInfoHandler(hsm *hsm.Hsm) InfoHandler {
@@ -22,6 +24,15 @@ func BuildInfoHandler(hsm *hsm.Hsm) InfoHandler {
 	}
 }
 
+// GetRootPublicKeyHandler retrieves the root public key from the HSM
+// @Summary Get root public key
+// @Description Retrieves the public key of the Certificate Authority's root certificate from the Hardware Security Module (HSM)
+// @Tags info
+// @Accept json
+// @Produce json
+// @Success 200 {object} GetPublickKeyResponse "Successfully retrieved the root public key"
+// @Failure 500 {object} map[string]string "Internal server error - unable to retrieve public key from HSM"
+// @Router /info/root-public-key [get]
 func (h *InfoHandler) GetRootPublicKeyHandler(w http.ResponseWriter, r *http.Request) {
 	publicKey, err := h.hsm.GetPublicKeyPEM(h.hsm.RootKeyId)
 

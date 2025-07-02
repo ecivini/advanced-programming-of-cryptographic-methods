@@ -15,9 +15,8 @@ import (
 )
 
 type CertificateHandler struct {
-	repo         CertificateRepository
-	emailService *email.EmailService
-	// Add components for signed responses and replay protection
+	repo           CertificateRepository
+	emailService   *email.EmailService
 	responseSigner *ResponseSigner
 	nonceManager   *NonceManager
 }
@@ -39,7 +38,15 @@ func BuildCertificateHandler(repo CertificateRepository, email *email.EmailServi
 	}
 }
 
-// TODO: Refactor into proper sub functions and modules
+// CommitIdentityHandler initiates the certificate issuance process by committing an identity
+// @Summary Commit identity for certificate issuance
+// @Description Commits an identity by validating email and public key, then sends a challenge code to the provided email address
+// @Tags certificate
+// @Accept json
+// @Produce json
+// @Param request body object{email=string,public_key=string} true "Identity commitment request"
+// @Success 200 "Identity commitment successful, challenge sent via email"
+// @Failure 400 {object} map[string]string "Unable to send email challenge"
 func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		Email        string `json:"email"`
@@ -82,7 +89,15 @@ func (h *CertificateHandler) CommitIdentityHandler(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusOK)
 }
 
-// TODO: Refactor
+// CreateCertificateHandler creates a certificate after verifying the challenge signature
+// @Summary Create certificate
+// @Description Creates a digital certificate after validating the signature of the challenge sent via email
+// @Tags certificate
+// @Accept json
+// @Produce json
+// @Param request body object{signature=string,challenge=string} true "Certificate creation request"
+// @Success 200 {object} map[string]string "Certificate created successfully" example({"certificate": "-----BEGIN CERTIFICATE-----\n..."})
+// @Failure 400 {object} map[string]string "Unable to generate certificate"
 func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		SignatureB64 string `json:"signature"`
@@ -166,6 +181,15 @@ func (h *CertificateHandler) CreateCertificateHandler(w http.ResponseWriter, r *
 	json.NewEncoder(w).Encode(response)
 }
 
+// RevokeCertificateHandler revokes a certificate using its serial number
+// @Summary Revoke certificate
+// @Description Revokes a certificate by validating the signature for the revocation request
+// @Tags certificate
+// @Accept json
+// @Produce json
+// @Param request body object{signature=string,serial_number=string} true "Certificate revocation request"
+// @Success 200 {object} map[string]string "Certificate revoked successfully" example({"message": "Certificate revoked successfully"})
+// @Failure 400 {object} map[string]string "Unable to revoke certificate"
 func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		Signature    string `json:"signature"`
@@ -225,6 +249,15 @@ func (h *CertificateHandler) RevokeCertificateHandler(w http.ResponseWriter, r *
 	json.NewEncoder(w).Encode(response)
 }
 
+// RenewCertificateHandler renews a certificate extending its validity period
+// @Summary Renew certificate
+// @Description Renews a certificate by extending its validity period for one year after validating the signature
+// @Tags certificate
+// @Accept json
+// @Produce json
+// @Param request body object{signature=string,serial_number=string,nonce=int} true "Certificate renewal request"
+// @Success 200 {object} map[string]string "Certificate renewed successfully" example({"message": "Certificate renewed successfully", "certificate": "-----BEGIN CERTIFICATE-----\n..."})
+// @Failure 400 {object} map[string]string "Unable to renew certificate"
 func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *http.Request) {
 	var requestBody struct {
 		Signature    string `json:"signature"`
@@ -311,6 +344,17 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 	json.NewEncoder(w).Encode(response)
 }
 
+// GetCertificateStatusHandler retrieves the status of a certificate (good, revoked, or unknown)
+// @Summary Get certificate status
+// @Description Retrieves the current status of a certificate including revocation information if applicable
+// @Tags certificate
+// @Accept json
+// @Produce json
+// @Param request body StatusRequest true "Certificate status request"
+// @Success 200 {object} object "Signed certificate status response"
+// @Success 404 {object} object "Certificate not found (unknown status)"
+// @Failure 400 {object} map[string]string "Invalid request format or nonce validation failed"
+// @Failure 500 {object} map[string]string "Unable to retrieve certificate status"
 func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, r *http.Request) {
 	var request StatusRequest
 
@@ -391,6 +435,16 @@ func (h *CertificateHandler) GetCertificateStatusHandler(w http.ResponseWriter, 
 	json.NewEncoder(w).Encode(signedResponse)
 }
 
+// GetRevocationListHandler retrieves a paginated list of revoked certificates
+// @Summary Get certificate revocation list
+// @Description Retrieves a paginated list of revoked certificates with pagination support
+// @Tags certificate
+// @Accept json
+// @Produce json
+// @Param request body CrlRequest true "Certificate revocation list request"
+// @Success 200 {object} object "Signed revocation list response with pagination info"
+// @Failure 400 {object} map[string]string "Invalid request format, page parameters, or nonce validation failed"
+// @Failure 500 {object} map[string]string "Unable to retrieve revocation list"
 func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *http.Request) {
 	var request CrlRequest
 
