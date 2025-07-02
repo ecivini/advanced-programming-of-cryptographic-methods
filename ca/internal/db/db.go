@@ -113,11 +113,11 @@ func StoreIdentityCommitmentChallengeProof(client *mongo.Client, challenge strin
 	return nil
 }
 
-func RenewCertificate(client *mongo.Client, serial string, newExpiryDate time.Time) error {
+func RenewCertificate(client *mongo.Client, serial string, newExpiryDate time.Time, updatedUsedNonces []int) error {
 	collection := client.Database("ca").Collection("certificates_data")
 
 	filter := bson.M{"serial_number": serial}
-	update := bson.M{"$set": bson.M{"valid_until": bson.NewDateTimeFromTime(newExpiryDate)}}
+	update := bson.M{"$set": bson.M{"valid_until": bson.NewDateTimeFromTime(newExpiryDate), "renewal_nonces": updatedUsedNonces}}
 
 	result, err := collection.UpdateOne(context.Background(), filter, update)
 	if err != nil {

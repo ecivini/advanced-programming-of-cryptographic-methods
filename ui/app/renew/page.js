@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { signMessage } from '../utils/crypto';
+import { generateNonce, signMessage } from '../utils/crypto';
 import { handleFileUpload, downloadTextFile } from '../utils/ui';
 import { makeApiRequest } from '../utils/api';
 
@@ -9,6 +9,7 @@ export default function RenewPage() {
   const [serialNumber, setSerialNumber] = useState('');
   const [privateKey, setPrivateKey] = useState('');
   const [renewalMessage, setRenewalMessage] = useState('');
+  const [renewalNonce, setRenewalNonce] = useState(null);
   const [isRenewing, setIsRenewing] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
@@ -30,7 +31,9 @@ export default function RenewPage() {
   // Auto-generate renewal message when serial number changes
   useEffect(() => {
     if (serialNumber.trim()) {
-      setRenewalMessage(`Renew: ${serialNumber}`);
+      const nonce = generateNonce();
+      setRenewalNonce(nonce);
+      setRenewalMessage(`Renew: ${serialNumber}` + ` Nonce: ${nonce}`);
     } else {
       setRenewalMessage('');
     }
@@ -53,9 +56,10 @@ export default function RenewPage() {
 
       // Send renewal request to CA
       const CA_URL = process.env.NEXT_PUBLIC_CA_URL || 'http://localhost:5000';
-      const result = await makeApiRequest(CA_URL + '/v1/cert/renew', {
+      const result = await makeApiRequest(CA_URL + '/v1/certificate/renew', {
         signature: signature,
         serial_number: serialNumber,
+        nonce: renewalNonce,
       }, 'POST', true); // expect JSON response
 
       setNewCertificate(result.certificate);
@@ -179,7 +183,9 @@ export default function RenewPage() {
                 className="input font-mono"
                 placeholder="Enter certificate serial number..."
                 value={serialNumber}
-                onChange={(e) => setSerialNumber(e.target.value)}
+                onChange={(e) => {
+                  setSerialNumber(e.target.value);
+                }}
                 disabled={isRenewing}
               />
               <p className="text-sm text-slate-500 mt-2">

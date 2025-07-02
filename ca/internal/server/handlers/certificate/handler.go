@@ -229,6 +229,7 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 	var requestBody struct {
 		Signature    string `json:"signature"`
 		SerialNumber string `json:"serial_number"`
+		Nonce        int    `json:"nonce"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		handlers.ReturnErroredResponse("Invalid request payload", &w, http.StatusBadRequest)
@@ -269,7 +270,7 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 
 	// Verify signature
 	// Expected message is "Revoke: <serial number>"
-	message := []byte("Renew: " + serialNumber)
+	message := []byte("Renew: " + serialNumber + " Nonce: " + fmt.Sprint(requestBody.Nonce))
 	signatureValid := h.repo.verifySignature(message, signature, committedIdentity.PublicKeyDER)
 	if !signatureValid {
 		log.Println("[-] Invalid signature for renewing serial number: ", serialNumber)
@@ -279,7 +280,7 @@ func (h *CertificateHandler) RenewCertificateHandler(w http.ResponseWriter, r *h
 
 	// Update certificate data in DB
 	newExpiryDate := certData.ValidUntil.Time().Add(time.Hour * 24 * 365) // Renew for one year
-	if err := h.repo.RenewCertificate(serialNumber, newExpiryDate); err != nil {
+	if err := h.repo.RenewCertificate(serialNumber, newExpiryDate, requestBody.Nonce); err != nil {
 		log.Println("[-] Failed to renew certificate: ", err)
 		handlers.ReturnErroredResponse(genericErrorMessage, &w, http.StatusInternalServerError)
 		return

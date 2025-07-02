@@ -16,6 +16,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"slices"
 	"time"
 
 	"ca/internal/db"
@@ -252,9 +253,25 @@ func (repo *CertificateRepository) RevokeCertificate(serialNumber string) error 
 	return nil
 }
 
-func (repo *CertificateRepository) RenewCertificate(serialNumber string, newExpiryDate time.Time) error {
+func (repo *CertificateRepository) RenewCertificate(serialNumber string, newExpiryDate time.Time, nonce int) error {
+	certData := repo.GetCertificateDataFromSerialNumber(serialNumber)
+	if certData == nil {
+		return fmt.Errorf("certificate with serial number %s not found", serialNumber)
+	}
+
+	// check if nonce is already used
+	if certData.RenewalNonces != nil && slices.Contains(certData.RenewalNonces, nonce) {
+		return fmt.Errorf("nonce %d has already been used for certificate %s", nonce, serialNumber)
+	}
+
+	if certData.RenewalNonces == nil {
+		certData.RenewalNonces = []int{nonce}
+	} else {
+		certData.RenewalNonces = append(certData.RenewalNonces, nonce)
+	}
+
 	// Update the certificate status in the database
-	err := db.RenewCertificate(repo.db, serialNumber, newExpiryDate)
+	err := db.RenewCertificate(repo.db, serialNumber, newExpiryDate, certData.RenewalNonces)
 	if err != nil {
 		return fmt.Errorf("failed to renew certificate with serial %s: %w", serialNumber, err)
 	}
