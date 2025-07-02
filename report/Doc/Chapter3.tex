@@ -15,11 +15,11 @@ the certificate lifecycle:
 \subsection{CA backend server} 
 The core service responsible for all cryptographic operations and certificate 
 lifecycle management. Go was selected for its strong and complete cryptographic standard library, 
-excellent performance characteristics, and simplicity of development
+excellent performance characteristics and simplicity of development.
 
 \subsection{User interface}
 A React-based frontend providing certificate management capabilities. As this UI is intended 
-to be used only for demo purposes, Next.js was chosen for its ease of use, built-in routing, 
+to be used only for demo purposes, Next.js was chosen for its ease of use, built-in routing 
 and vast ecosystem of libraries.
 
 \subsection{Database}
@@ -73,9 +73,7 @@ establishes and verifies user identity through a secure multi-step protocol.
 
 The process initiates when a user accesses the certificate request interface. 
 The client application, running in the browser, generates a new cryptographic 
-key pair using the Web Crypto API. The user selects their preferred key type 
-(ECDSA P-256, RSA 2048-bit, or RSA 4096-bit) based on their security requirements 
-and intended certificate usage.
+key pair using the Web Crypto API. 
 
 The client extracts the public key from the generated pair and formats it as 
 a PEM-encoded certificate signing request. Along with the user's email address 
@@ -87,13 +85,12 @@ When the CA backend receives the commitment request at the `/commit-identity`
 endpoint, it performs comprehensive validation:
 
 The system validates the email address format using standard RFC 5322 compliance 
-checking. The provided key type must match one of the supported algorithms 
-(ECDSA, RSA\_2048, RSA\_4096). The public key undergoes cryptographic validation 
+checking. The public key undergoes cryptographic validation 
 to ensure it is mathematically valid and properly formatted.
 
 Upon successful validation, the CA generates a unique challenge string and creates 
 an identity commitment record in the database. This record contains the user's 
-email, public key in DER format, selected key type, challenge string, and an 
+email, public key in DER format, challenge string and an 
 expiration timestamp. The CA reserves a unique serial number for the eventual 
 certificate, ensuring no conflicts occur during concurrent requests.
 
@@ -237,7 +234,6 @@ This section provides detailed analysis of how system components communicate dur
 certificate operations, emphasizing the role of the HSM and signed responses.
 
 \subsection{Frontend-backend communication}
-{\color{red}TODO: Add diagrams?}
 
 The web interface communicates with the CA backend through RESTful API endpoints, 
 with each operation following specific message flow patterns.
@@ -270,6 +266,13 @@ the signature and confirms revocation through a JSON response.
 Similarly, when a user wants to renew a certificate, the frontend sends a POST 
 requests to `/v1/certificate/renew` containing renewal signatures and the serial number of the 
 certificate. Successful renewal returns both confirmation and the renewed certificate.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[keepaspectratio, width=\textwidth]{Pic/renew_certificate.pdf}
+    \caption{Certificate revocation flow}
+    \label{fig:certificate-revocation-flow}
+\end{figure}
 
 \subsection{HSM integration patterns}
 
