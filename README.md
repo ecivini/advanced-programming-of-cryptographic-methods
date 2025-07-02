@@ -11,12 +11,6 @@ This project involves implementing a simplified CA capable of handling operation
 
 The CA will also verify that the certificate holders effectively own the correct private key and email.
 
-## Report
-TODO
-
-## Requirements
-TODO
-
 ## Usage
 
 ### Starting the server
@@ -28,6 +22,9 @@ During the first startup, the server will automatically create a new root keypai
 ```bash
 $ docker container rm local-kms
 ```
+
+## Report
+A report containing documentation, requirements, known limitations and architectural choices can be found [here](./report/ReportAPoCM.pdf).
 
 ## Test challenge: ECDSA
 
