@@ -9,6 +9,16 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+// StoreIdentityCommitment stores a new identity commitment in the database.
+// An identity commitment represents a user's initial request to obtain a certificate,
+// containing their public key and email information along with a generated challenge.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - commitment: IdentityCommitment struct containing user's public key, email, and challenge
+//
+// Returns:
+//   - error: nil on success, or the error that occurred during the database operation
 func StoreIdentityCommitment(client *mongo.Client, commitment IdentityCommitment) error {
 	collection := client.Database("ca").Collection("identity_commitments")
 	_, err := collection.InsertOne(context.Background(), commitment)
@@ -16,6 +26,15 @@ func StoreIdentityCommitment(client *mongo.Client, commitment IdentityCommitment
 	return err
 }
 
+// RetrieveIdentityCommittment retrieves an identity commitment from the database using a challenge string.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - challenge: The unique challenge string associated with the identity commitment, encoded in base64
+//
+// Returns:
+//   - *IdentityCommitment: Pointer to the found identity commitment, or nil if not found
+//   - error: nil on success, mongo.ErrNoDocuments if not found, or other database errors
 func RetrieveIdentityCommittment(client *mongo.Client, challenge string) (*IdentityCommitment, error) {
 	collection := client.Database("ca").Collection("identity_commitments")
 	filter := bson.M{"challenge": challenge}
@@ -30,6 +49,15 @@ func RetrieveIdentityCommittment(client *mongo.Client, challenge string) (*Ident
 	return &result, nil
 }
 
+// RetrieveIdentityCommittmentFromReservedSerial retrieves an identity commitment using a reserved serial number.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - serial: The reserved serial number associated with the identity commitment
+//
+// Returns:
+//   - *IdentityCommitment: Pointer to the found identity commitment, or nil if not found
+//   - error: nil on success, mongo.ErrNoDocuments if not found, or other database errors
 func RetrieveIdentityCommittmentFromReservedSerial(client *mongo.Client, serial string) (*IdentityCommitment, error) {
 	collection := client.Database("ca").Collection("identity_commitments")
 	filter := bson.M{"reserved_serial_number": serial}
@@ -44,6 +72,15 @@ func RetrieveIdentityCommittmentFromReservedSerial(client *mongo.Client, serial 
 	return &result, nil
 }
 
+// RetrieveCertificateDataFromSerial retrieves certificate data from the database using a serial number.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - serial: The unique serial number of the certificate to retrieve
+//
+// Returns:
+//   - *CertificateData: Pointer to the found certificate data, or nil if not found
+//   - error: nil on success, mongo.ErrNoDocuments if not found, or other database errors
 func RetrieveCertificateDataFromSerial(client *mongo.Client, serial string) (*CertificateData, error) {
 	collection := client.Database("ca").Collection("certificates_data")
 	filter := bson.M{"serial_number": serial}
@@ -58,6 +95,14 @@ func RetrieveCertificateDataFromSerial(client *mongo.Client, serial string) (*Ce
 	return &result, nil
 }
 
+// StoreCertificateData stores certificate data in the database after successful certificate issuance.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - certData: CertificateData struct containing all certificate information to be stored
+//
+// Returns:
+//   - error: nil on success, or the error that occurred during the database operation
 func StoreCertificateData(client *mongo.Client, certData CertificateData) error {
 	collection := client.Database("ca").Collection("certificates_data")
 	_, err := collection.InsertOne(context.Background(), certData)
@@ -65,6 +110,15 @@ func StoreCertificateData(client *mongo.Client, certData CertificateData) error 
 	return err
 }
 
+// RetrieveCertificateData retrieves certificate data from the database using a serial number.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - serial: The unique serial number of the certificate to retrieve
+//
+// Returns:
+//   - *CertificateData: Pointer to the found certificate data, or nil if not found
+//   - error: nil on success, mongo.ErrNoDocuments if not found, or other database errors
 func RetrieveCertificateData(client *mongo.Client, serial string) (*CertificateData, error) {
 	collection := client.Database("ca").Collection("certificates_data")
 	filter := bson.M{"serial_number": serial}
@@ -79,6 +133,14 @@ func RetrieveCertificateData(client *mongo.Client, serial string) (*CertificateD
 	return &result, nil
 }
 
+// RevokeCertificate marks a certificate as revoked in the database and sets the revocation timestamp.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - serial: The unique serial number of the certificate to revoke
+//
+// Returns:
+//   - error: nil on success, mongo.ErrNoDocuments if certificate not found, or other database errors
 func RevokeCertificate(client *mongo.Client, serial string) error {
 	collection := client.Database("ca").Collection("certificates_data")
 
@@ -96,6 +158,15 @@ func RevokeCertificate(client *mongo.Client, serial string) error {
 	return nil
 }
 
+// StoreIdentityCommitmentChallengeProof updates an identity commitment with cryptographic proof.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - challenge: The unique challenge string that identifies the commitment
+//   - proof: The cryptographic proof (signature) demonstrating private key possession
+//
+// Returns:
+//   - error: nil on success, mongo.ErrNoDocuments if commitment not found, or other database errors
 func StoreIdentityCommitmentChallengeProof(client *mongo.Client, challenge string, proof []byte) error {
 	collection := client.Database("ca").Collection("identity_commitments")
 
@@ -113,6 +184,16 @@ func StoreIdentityCommitmentChallengeProof(client *mongo.Client, challenge strin
 	return nil
 }
 
+// RenewCertificate extends the validity period of an existing certificate.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - serial: The unique serial number of the certificate to renew
+//   - newExpiryDate: The new expiration date for the renewed certificate
+//   - updatedUsedNonces: Array of nonces used in renewal requests to prevent replay attacks
+//
+// Returns:
+//   - error: nil on success, mongo.ErrNoDocuments if certificate not found, or other database errors
 func RenewCertificate(client *mongo.Client, serial string, newExpiryDate time.Time, updatedUsedNonces []int) error {
 	collection := client.Database("ca").Collection("certificates_data")
 
@@ -130,6 +211,16 @@ func RenewCertificate(client *mongo.Client, serial string, newExpiryDate time.Ti
 	return nil
 }
 
+// GetRevokedCertificates retrieves a paginated list of all revoked certificates from the database.
+//
+// Parameters:
+//   - client: MongoDB client instance for database operations
+//   - page: The page number for pagination (1-based indexing)
+//   - pageSize: The number of certificates to return per page
+//
+// Returns:
+//   - []CertificateData: Slice of revoked certificate data, empty if no revoked certificates found
+//   - error: nil on success, or the error that occurred during the database operation
 func GetRevokedCertificates(client *mongo.Client, page, pageSize int) ([]CertificateData, error) {
 	collection := client.Database("ca").Collection("certificates_data")
 	filter := bson.M{"revoked": true}
@@ -152,85 +243,3 @@ func GetRevokedCertificates(client *mongo.Client, page, pageSize int) ([]Certifi
 
 	return revokedCerts, nil
 }
-
-// func SaveIssuedCertificate(cert IssuedCertificate) error {
-// 	collection := Client.Database("ca").Collection("issued_certificates")
-// 	_, err := collection.InsertOne(context.Background(), cert)
-// 	return err
-// }
-
-// func GetCertificateByID(id string) (*IssuedCertificate, error) {
-// 	collection := Client.Database("ca").Collection("issued_certificates")
-// 	objID, err := primitive.ObjectIDFromHex(id)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	var cert IssuedCertificate
-// 	err = collection.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&cert)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &cert, nil
-// }
-
-// func SaveRevokedCertificate(revoked RevocatedCertificate) error {
-// 	collection := Client.Database("ca").Collection("revoked_certificates")
-// 	_, err := collection.InsertOne(context.Background(), revoked)
-// 	return err
-// }
-
-// func GetRevokedCertificateByID(id string) (*RevocatedCertificate, error) {
-// 	collection := Client.Database("ca").Collection("revoked_certificates")
-// 	objID, err := primitive.ObjectIDFromHex(id)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	var revoked RevocatedCertificate
-// 	err = collection.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&revoked)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &revoked, nil
-// }
-
-// func RevokeCertificateByID(serialNumber string) error {
-// 	collection := Client.Database("ca").Collection("issued_certificates")
-// 	_, err :=
-// 		collection.UpdateOne(
-// 			context.Background(),
-// 			bson.M{"certificate_id": serialNumber},
-// 			bson.M{"$set": bson.M{"revocation_date": time.Now().Format(time.RFC3339)}},
-// 		)
-// 	return err
-// }
-
-// func GetCRL() ([]RevocatedCertificate, error) {
-// 	collection := Client.Database("ca").Collection("revoked_certificates")
-// 	cursor, err := collection.Find(context.Background(), bson.M{})
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer cursor.Close(context.Background())
-
-// 	var revoked []RevocatedCertificate
-// 	if err = cursor.All(context.Background(), &revoked); err != nil {
-// 		return nil, err
-// 	}
-
-// 	return revoked, nil
-// }
-
-// func RenewCertificate(serialNumber string) error {
-// 	collection := Client.Database("ca").Collection("issued_certificates")
-// 	_, err :=
-// 		collection.UpdateOne(
-// 			context.Background(),
-// 			bson.M{"certificate_id": serialNumber},
-// 			bson.M{"$set": bson.M{"valid_from": time.Now().Format(time.RFC3339)}},
-// 		)
-// 	return err
-// }
