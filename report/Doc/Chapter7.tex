@@ -1,0 +1,80 @@
+\chapter{A brief frontend guide {\color{red}Capitolo o appendice?}}
+
+This chapter provides a simple guide for users on how to interact with the User Interface (UI) of the Identity Certificate Authority (IdenCA) system. 
+The UI is designed to be intuitive and user-friendly, allowing users to perform essential operations efficiently.
+\\{\color{red}TODO: Add screenshots of the UI components.\\Consider adding endpoints.}
+
+\section{Home Page}
+The Home Page serves as the starting point for interacting with the CA and is designed to provide users with essential information and quick access to key functionalities of the system.
+
+On this page, users can:
+\begin{itemize}
+    \item View the Certificate Authority's public key.
+    \item Download the public key for use in their applications.
+    \item Copy the public key to their clipboard for easy access.
+    \item Navigate to other important sections of the CA system.
+\end{itemize}
+
+\section{Creating a Certificate}
+To create a certificate, users must follow a series of steps that involve providing necessary information and completing verification processes. 
+\subsection{Identity Commitment}
+To begin the certificate request process users must first create an identity commitment:
+\begin{itemize}
+    \item Navigate to the "Commit Identity" section. {\color{red}Usiamo il nome della pagina o il nome nel menù?}
+    \item Enter email address in the designed field.
+    \item Upload public key.
+    \item Click the "Commit Identity" button to submit the request.
+\end{itemize}
+These steps register the user's identity with the CA and generate a challenge that must be signed in the next step.
+
+\subsection{Sign Challenge} {\color{red}TODO: Nome della pagina Sign certificate (da cambiare)}
+Once the identity commitment is created, users must copy the challenge sent by the CA and sign it with their private key:
+\begin{itemize}
+    \item Navigate to the "Sign" section.
+    \item Paste the challenge received from the CA into the designated field.
+    \item Sign the challenge using the private key associated with the public key uploaded during the identity commitment.
+    \item Click the "Sign \& Request Certificate" button to submit the signed challenge.
+\end{itemize}
+If the process is successful, the new certificate will be displayed on the screen and can be downloaded for use.
+
+\section{Certificate Management}
+
+\subsection{Viewing Certificates}
+To inspect the details of a certificate, users can navigate to the "View Certificates" section. Here, they can:
+\begin{itemize}
+    \item Upload a certificate.
+    \item View the certificate's details, including its validity period, public key, and associated identity.
+    \item If the certificate is valid and not expired, there will be two buttons:
+        \begin{itemize}
+            \item \textbf{Revoke Certificate}: To initiate the revocation process.
+            \item \textbf{Renew Certificate}: To request a renewal of the certificate.
+        \end{itemize}
+\end{itemize}
+
+\subsection{Revoking a Certificate}
+For revoking a certificate, users need the certificate's serial number and the private key associated with the certificate.
+There are two ways to revoke a certificate:
+\begin{itemize}
+    \item Navigate to the "Revoke Certificate" section.
+    \item Enter the certificate's serial number and upload the private key.
+    \item Click the "Revoke Certificate" button to submit the revocation request.
+\end{itemize}
+Alternatively, users can revoke a certificate directly from the "View Certificates" section by clicking the "Revoke Certificate" button after viewing the certificate details.
+In this case, the serial number will be automatically filled in.
+
+\subsection{Renewing a Certificate}
+Similar to revocation, renewing a certificate requires the certificate's serial number and the private key associated with the certificate.
+Users can renew a certificate by:
+\begin{itemize}
+    \item Navigating to the "Renew Certificate" section.
+    \item Entering the certificate's serial number and uploading the private key.
+    \item Clicking the "Renew Certificate" button to submit the renewal request.
+\end{itemize}
+Alternatively, users can renew a certificate directly from the "View Certificates" section by clicking the "Renew Certificate" button after viewing the certificate details.
+In this case, the serial number will be automatically filled in.
+
+\section{Certificate Revocation List (CRL)}
+Visit the "CRL" section to view the Certificate Revocation List. 
+This list contains all certificates that have been revoked by the CA. 
+
+This guide covers the basic functionalities of the UI. For advanced features or troubleshooting, refer to the system documentation or contact the administrator.
