@@ -30,7 +30,7 @@ querying and retrieval of certificate data.
 
 \subsection{Hardware Security Module (HSM)}
 We decided to use an HSM, in particulare an emulated version of AWS KMS, to ensure that all CA 
-private key operations occur within FIPS 140-2 Level 3 certified hardware. 
+cryptographic operations requiring its private key occur within FIPS 140-2 Level 3 certified hardware. 
 This design decision eliminates the risk of private key exposure while providing 
 enterprise-grade security and audit capabilities.
 
@@ -50,7 +50,7 @@ email ownership verification with cryptographic proof of private key possession.
 This dual verification ensures only legitimate key owners can obtain certificates.
 
 \subsection{Signed responses}
-All CA responses are cryptographically signed to ensure 
+Critical CA responses are cryptographically signed to ensure 
 integrity and authenticity. This prevents response tampering and provides 
 non-repudiation for all CA operations.
 

@@ -14,6 +14,7 @@ The following software must be installed on the target system:
     \item \textbf{Docker}: Version 28.0 or higher (tested with 28.3)
     \item \textbf{Docker Compose}: Version 2.37 or higher (tested with 2.37.3)
     \item \textbf{Git}: Version 2
+    \item \textbf{Firefox}: Version 133 or higher (for the web interface, other browsers may not work correctly)
 \end{itemize}
 
 \section{Installation process}
@@ -37,7 +38,6 @@ $ cd advanced-programming-of-cryptographic-methods
 \subsection{Configuration}
 
 Create a \texttt{.env} file in the project root directory with the following configuration:
-{\color{red}TODO: Add resend api for shared email address account}
 \begin{verbatim}
 # MongoDB Configuration
 MONGO_USERNAME=camanager
@@ -49,7 +49,7 @@ AWS_ACCESS_KEY_ID=111122223333
 AWS_SECRET_ACCESS_KEY=aaaabbbb11111
 
 # Email Service Configuration (Resend.com)
-RESEND_API_KEY=your_resend_api_key_here
+RESEND_API_KEY=re_j58AAemN_Mi8he8LUXUTVvGmNBwWtc6sW
 RESEND_FROM=onboarding@resend.dev
 \end{verbatim}
 As the CA is using an emulated version of AWS KMS, the 
