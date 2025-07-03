@@ -21,7 +21,7 @@ export default function RootLayout({ children }) {
                   </svg>
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-slate-800">SecureCA</h1>
+                  <h1 className="text-xl font-bold text-slate-800">IdenCA</h1>
                   <p className="text-xs text-slate-500">Certificate Authority</p>
                 </div>
               </div>
@@ -56,7 +56,7 @@ export default function RootLayout({ children }) {
         </main>
         <footer className="mt-auto bg-white border-t border-slate-200">
           <div className="container mx-auto px-6 py-4 text-center text-sm text-slate-500">
-            © 2024 SecureCA - Professional Certificate Authority Management
+            © 2024 IdenCA - Certificate Authority for Identities
           </div>
         </footer>
       </body>

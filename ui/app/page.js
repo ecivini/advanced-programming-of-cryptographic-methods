@@ -79,7 +79,6 @@ useEffect(() => {
         </div>
         <h1 className="text-4xl font-bold text-slate-800 mb-4">Certificate Authority</h1>
         <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-          Secure certificate management with enterprise-grade cryptographic operations. 
           View and manage your CA's public key infrastructure.
         </p>
       </div>
