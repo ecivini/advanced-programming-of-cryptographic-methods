@@ -493,7 +493,6 @@ func (h *CertificateHandler) GetRevocationListHandler(w http.ResponseWriter, r *
 		revokedCertInfos[i] = RevokedCertInfo{
 			SerialNumber:   cert.SerialNumber,
 			RevocationDate: cert.RevocationDate.Time(),
-			// TODO: add RevocationReason
 		}
 	}
 
