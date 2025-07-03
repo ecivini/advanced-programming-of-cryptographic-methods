@@ -1,4 +1,4 @@
-\chapter{System Architecture and Certificate Lifecycle}
+\chapter{System architecture and certificate lifecycle}
 \label{Architecture}
 
 This chapter presents the architectural design decisions and  operational flows 
@@ -28,14 +28,13 @@ document-oriented structure, which allows flexible storage and suits well with t
 metadata requirements. It also provides indexing capabilities for efficient 
 querying and retrieval of certificate data.
 
-\subsection{Hardware Security Module (AWS KMS)}
+\subsection{Hardware Security Module (HSM)}
 We decided to use an HSM, in particulare an emulated version of AWS KMS, to ensure that all CA 
 private key operations occur within FIPS 140-2 Level 3 certified hardware. 
 This design decision eliminates the risk of private key exposure while providing 
 enterprise-grade security and audit capabilities.
 
 \section{Security-first architecture}
-
 The architecture implements security principles through multiple 
 layers of protection.
 
@@ -86,13 +85,15 @@ endpoint, it performs comprehensive validation:
 
 The system validates the email address format using standard RFC 5322 compliance 
 checking. The public key undergoes cryptographic validation 
-to ensure it is mathematically valid and properly formatted.
+to ensure it is valid and properly formatted.
 
 Upon successful validation, the CA generates a unique challenge string and creates 
 an identity commitment record in the database. This record contains the user's 
 email, public key in DER format, challenge string and an 
 expiration timestamp. The CA reserves a unique serial number for the eventual 
-certificate, ensuring no conflicts occur during concurrent requests.
+certificate, ensuring no conflicts occur during concurrent requests. An identity
+commitment is valid for the next 24 hours, after which it expires and must be 
+re-committed. In addition, it's not possible to verify the same identity twice.
 
 \subsubsection{Email verification}
 
@@ -102,8 +103,7 @@ address using a secure email delivery service.
 
 This email-based verification serves dual purposes: it confirms the user has 
 access to the claimed email address and provides the challenge string needed 
-for the subsequent cryptographic proof phase. The challenge has a limited 
-validity period (typically 24 hours) to prevent indefinite pending commitments.
+for the subsequent cryptographic proof phase.
 
 \subsection{Phase 2: certificate generation}
 
@@ -319,109 +319,6 @@ is signed using the HSM to ensure authenticity.
 Certificate Revocation List queries return 
 signed responses containing the list of revoked certificates with pagination 
 support. Each response includes update timestamps and replay protection nonces.
-
-% \section{Security Considerations and Implementation}
-
-% The security implementation encompasses multiple layers of protection to ensure 
-% the integrity and confidentiality of the certificate authority operations.
-
-% \subsection{Cryptographic Security}
-
-% \textbf{Key Generation}: All cryptographic keys use cryptographically secure 
-% random number generation. Client-side key generation employs the Web Crypto API's 
-% secure random functions, while HSM key generation uses FIPS 140-2 Level 3 
-% certified random number generators.
-
-% \textbf{Signature Algorithms}: The system supports multiple signature algorithms 
-% including ECDSA with P-256 curves and RSA with 2048-bit and 4096-bit key sizes. 
-% Algorithm selection balances security requirements with performance considerations.
-
-% \textbf{Hash Functions}: All cryptographic operations use SHA-256 or stronger 
-% hash functions to ensure collision resistance and security against known attacks.
-
-% \subsection{Identity Verification Security}
-
-% \textbf{Multi-Factor Verification}: The identity verification process combines 
-% email ownership proof with cryptographic key ownership proof. This dual verification 
-% significantly reduces the risk of fraudulent certificate issuance.
-
-% \textbf{Challenge Uniqueness}: Each identity commitment receives a unique challenge 
-% string generated using cryptographically secure random functions. Challenge 
-% reuse is prevented through database constraints and validation logic.
-
-% \textbf{Temporal Validity}: All challenges and commitments have limited validity 
-% periods to prevent indefinite pending states and reduce attack windows.
-
-% \subsection{Replay Attack Protection}
-
-% \textbf{Nonce-Based Protection}: Critical operations include nonces to prevent 
-% replay attacks. Each request receives a unique nonce that cannot be reused, 
-% ensuring the freshness of all operations.
-
-% \textbf{Timestamp Validation}: Response freshness is enforced through timestamp 
-% validation, preventing the reuse of stale responses even if signatures remain valid.
-
-% \textbf{One-Time Use Enforcement}: Challenge strings and similar authentication 
-% tokens are marked as used after successful operations, preventing their reuse 
-% in subsequent attacks.
-
-% \section{Operational Considerations}
-
-% The practical deployment and operation of the Certificate Authority system requires 
-% careful consideration of performance, monitoring, and maintenance aspects.
-
-% \subsection{Performance and Scalability}
-
-% \textbf{HSM Operation Latency}: HSM operations introduce network latency due to 
-% API calls to AWS KMS. The system is designed to minimize HSM interactions by 
-% performing all local validation before requesting signing operations. Typical 
-% HSM signing operations complete within 100-500 milliseconds depending on 
-% network conditions.
-
-% \textbf{Database Performance}: MongoDB indices on serial numbers, email addresses, 
-% and challenge strings ensure efficient query performance even with large certificate 
-% volumes. Compound indices support complex queries required for CRL generation 
-% and certificate status checking.
-
-% \textbf{Concurrent Request Handling}: The Go backend's goroutine-based concurrency 
-% model enables handling of multiple certificate requests simultaneously. Each request 
-% operates independently, with database transactions ensuring consistency during 
-% concurrent operations.
-
-% \subsection{Monitoring and Logging}
-
-% \textbf{Audit Trail Completeness}: Every significant operation generates comprehensive 
-% audit logs including timestamps, user identifiers, operation outcomes, and HSM 
-% interaction records. These logs support compliance requirements and incident 
-% investigation procedures.
-
-% \textbf{HSM Operation Monitoring}: AWS CloudTrail provides detailed logs of all 
-% KMS operations, enabling monitoring of HSM usage patterns and detection of 
-% anomalous signing activity. Integration with monitoring systems can alert 
-% administrators to unusual HSM usage patterns.
-
-% \textbf{System Health Monitoring}: Health check endpoints enable external monitoring 
-% systems to verify CA availability and database connectivity. Container health 
-% checks ensure rapid detection and recovery from component failures.
-
-% \subsection{Maintenance and Updates}
-
-% \textbf{Certificate Expiration Management}: The system tracks certificate expiration 
-% dates and can generate reports or notifications for certificates approaching 
-% expiration. Automated renewal processes can be implemented for qualifying certificates.
-
-% \textbf{CRL Update Frequency}: Certificate Revocation Lists are updated in real-time 
-% as certificates are revoked. The signed CRL responses include nextUpdate timestamps 
-% indicating when clients should refresh their cached CRL data.
-
-% \textbf{HSM Key Rotation}: AWS KMS supports automatic key rotation policies that 
-% can be configured based on organizational security requirements. Key rotation 
-% maintains backward compatibility while enhancing long-term security.
-
-% This comprehensive architecture ensures the Certificate Authority system provides 
-% reliable, secure, and scalable PKI services while maintaining the highest 
-% standards of cryptographic security through HSM integration and defense-in-depth 
-% security practices.
 
 \section{Code Structure and organization}
 

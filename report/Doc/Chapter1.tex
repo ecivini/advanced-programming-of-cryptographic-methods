@@ -10,7 +10,7 @@ the CA's private key and implementing proper verification procedures.
 The system provides user-friendly interfaces through both API endpoints for developers and a web 
 interface for end users. 
 
-\section{Key Features}
+\section{Key features}
 
 The Certificate Authority supports the complete certificate lifecycle. 
 For certificate issuance, the system processes certificate requests, verifies the requester's identity, 
@@ -22,7 +22,7 @@ for compromised or no longer needed certificates, maintaining a Certificate Revo
 Identity verification ensures that certificate requesters own the private key and control the email 
 address associated with their request.
 
-\section{System Architecture}
+\section{System architecture}
 
 The system consists of several integrated components. The backend server is a Go API that handles 
 all certificate operations and communicates with the database and HSM. 
@@ -33,7 +33,7 @@ Security operations are performed by a HSM that stores the CA's private key
 and performs cryptographic operations. 
 An automated email service supports identity verification during certificate requests.
 
-\section{Report Structure}
+\section{Report structure}
 
 This report provides a comprehensive overview of the Certificate Authority implementation. 
 Chapter 2 presents the requirements analysis and system specifications. 
