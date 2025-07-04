@@ -20,28 +20,34 @@ The following software must be installed on the target system:
 \section{Installation process}
 
 \subsection{Environment Setup}
+There are two ways to set up the project: via git or by downloading the zip archive. 
 \begin{verbatim}
-# Verify Docker and Docker Compose are installed
+# 1) Verify Docker and Docker Compose are installed
 $ docker --version
 Docker version 28.3.0, build 38b7060a21
 
 $ docker compose version
 Docker Compose version 2.37.3
 
-# Clone the repository 
+# 2.a) (Git approach) Clone the repository 
 $ git clone https://github.com/ecivini/advanced-programming-of-cryptographic-methods.git
 
-# Move to the project directory
+# 2.b) (Zip approach) Download and unzip the project archive
+$ unzip apocm.zip
+
+# 3) Move to the project directory
 $ cd advanced-programming-of-cryptographic-methods
 \end{verbatim}
 
 \subsection{Configuration}
-
-Create a \texttt{.env} file in the project root directory with the following configuration:
+If you have downloaded the project as a zip archive, you will find a \texttt{.env} already populated
+with the necessary configuration values.
+On the other hand, if you have set up the environment using the git approach, you need to create a new
+\texttt{.env} file in the project root directory with the following configuration:
 \begin{verbatim}
 # MongoDB Configuration
 MONGO_USERNAME=camanager
-MONGO_PASSWORD=912k83hb0slW)s2
+MONGO_PASSWORD=<choose a safe password>
 
 # AWS/HSM Configuration
 AWS_REGION=eu-west-1
@@ -49,7 +55,7 @@ AWS_ACCESS_KEY_ID=111122223333
 AWS_SECRET_ACCESS_KEY=aaaabbbb11111
 
 # Email Service Configuration (Resend.com)
-RESEND_API_KEY=re_j58AAemN_Mi8he8LUXUTVvGmNBwWtc6sW
+RESEND_API_KEY=<copy your API key from Resend.com>
 RESEND_FROM=onboarding@resend.dev
 \end{verbatim}
 As the CA is using an emulated version of AWS KMS, the 
