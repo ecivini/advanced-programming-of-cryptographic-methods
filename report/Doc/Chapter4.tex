@@ -87,3 +87,13 @@ specified cases due to time constraints.
 Because of this, a significant future improvement would be to use ASN.1 OCSP responses, making this 
 implementation more compatible with the already existing PKI ecosystem. Considering that the core 
 functionalities of OCSP are already implemented, this change should not require significant effort.
+
+\section{Secure communication between components}
+The current implementation is using HTTP protocol for communications between components, which is not 
+secure. This choice has been taken as usually, in a production environment, such components are 
+never accessible from the internet directly, but only through a reverse proxy that
+provides TLS termination. In particular, the reverse proxy is supposed to be configured to make
+only the UI and the CA server accessible to the public, while the HSM and the database are 
+placed inside a private network, accessible only from the CA server. As this is not a functionality
+of the project itself, and requires a significant effort to implement, we have decided to not implement 
+it and focus on the core functionalities of the CA.
