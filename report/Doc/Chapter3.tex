@@ -167,7 +167,7 @@ The CA receives the revocation request containing the serial number and signatur
 The system retrieves the original identity commitment record associated with 
 the serial number to obtain the corresponding public key.
 The CA verifies the revocation signature against the constructed message 
-"Revoke: $<$serial number$>$" using the certificate's public key. This verification 
+"Revoke: $<$serial number$>$" using the committed public key. This verification 
 ensures only the legitimate certificate owner can initiate revocation.
 
 Upon successful verification, the CA updates the certificate record in the database, 
@@ -184,7 +184,7 @@ the certificate's temporal validity.
 \subsubsection{Renewal request process}
 The renewal process requires the certificate owner to prove continued possession 
 of the private key. The client constructs a renewal message in the format 
-"Renew: $<$serial number$>$ Nonce: $<$random nonce$>$" and signs it using the certificate's 
+"Renew: $<$serial number$>$ Nonce: $<$random nonce$>$" and signs it using their 
 private key.
 This signature proves the requester still controls the private key associated 
 with the certificate, ensuring only legitimate certificate owners can renew 
