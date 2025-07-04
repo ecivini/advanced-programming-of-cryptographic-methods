@@ -1,14 +1,14 @@
-\chapter{Instructions for installation \\and execution}
+\chapter{Instructions for installation and execution}
 
 This chapter provides instructions for installing, configuring, and executing the 
 Certificate Authority. These instructions are designed to enable readers to successfully 
 deploy and test the system in their own environments.
 
-\section{Software Prerequisites}
+\section{Software prerequisites}
 
 The following software must be installed on the target system:
 
-\textbf{Required Software:}
+\textbf{Required software:}
 \begin{itemize}
     \item \textbf{Operating System}: Linux, macOS, or Windows with WSL2 (tested on Linux)
     \item \textbf{Docker}: Version 28.0 or higher (tested with 28.3)
@@ -19,7 +19,7 @@ The following software must be installed on the target system:
 
 \section{Installation process}
 
-\subsection{Environment Setup}
+\subsection{Environment setup}
 There are two ways to set up the project: via git or by downloading the zip archive. 
 \begin{verbatim}
 # 1) Verify Docker and Docker Compose are installed
@@ -66,7 +66,7 @@ set to the default email address provided by Resend.com.
 
 \subsection{Starting the CA}
 
-\textbf{Initial Startup:}
+\textbf{Initial startup:}
 \begin{verbatim}
 # Build and start all services
 docker compose up --build
@@ -86,9 +86,9 @@ After that, and in any execution, the system will start the following services:
     \item \textbf{Frontend}: Web interface on port 3000
 \end{itemize}
 
-\subsection{Service Verification}
+\subsection{Service verification}
 
-\textbf{Health Check Endpoints:}
+\textbf{Health check endpoints:}
 \begin{verbatim}
 # Backend health check
 curl http://localhost:5000/v1/health
