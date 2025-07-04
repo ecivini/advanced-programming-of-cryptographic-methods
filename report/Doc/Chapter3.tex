@@ -197,7 +197,7 @@ for the same certificate using the same nonce will be rejected by the CA.
 The CA performs several validation steps before processing renewal requests.
 First, the system verifies the certificate exists and hasn't been revoked. It confirms 
 the certificate hasn't expired, as expired certificates cannot be renewed. 
-The, the CA validates the renewal signature against the message "Renew: $<$serial number$>$ Nonce: 
+Then, the CA validates the renewal signature against the message "Renew: $<$serial number$>$ Nonce: 
 $<$provided nonce$>$" using the committed public key.
 Upon successful validation, the CA extends the certificate's validity period 
 (typically by one year) and generates a new certificate with the updated expiration 
