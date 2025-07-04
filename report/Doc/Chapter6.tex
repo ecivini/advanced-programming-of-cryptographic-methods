@@ -90,3 +90,35 @@ curl http://localhost:5000/v1/health
 # Frontend accessibility
 curl http://localhost:3000
 \end{verbatim}
+
+\section{Generating a Key Pair with OpenSSL}
+
+To use the system, users must generate a cryptographic key pair. 
+The private key should be kept secure, while the public key can be shared with others. 
+OpenSSL provides a straightforward way to generate keys from the command line. 
+Users can choose among the following algorithms:
+
+\begin{itemize}
+    \item \textbf{RSA 2048-bit}
+    \begin{verbatim}
+openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:2048
+    \end{verbatim}
+
+    \item \textbf{RSA 4096-bit}
+    \begin{verbatim}
+openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:4096
+    \end{verbatim}
+
+    \item \textbf{ECDSA with P-256 curve}
+    \begin{verbatim}
+openssl ecparam -name prime256v1 -genkey -noout -out private_key.pem
+    \end{verbatim}
+\end{itemize}
+
+After generating the private key, the corresponding public key can be extracted with:
+
+\begin{verbatim}
+openssl pkey -in private_key.pem -pubout -out public_key.pem
+\end{verbatim}
+
+Make sure to store \texttt{private\_key.pem} securely, as it grants access to all operations requiring your identity.
