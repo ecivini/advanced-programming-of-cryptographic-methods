@@ -16,6 +16,20 @@ function base64Decode(str) {
   throw new Error('No base64 decode function available');
 }
 
+// Uint8Array.fromBase64 is not working in most browsers, so 
+// we implemented this alternative solution
+function bytesFromBase64(data) {
+  const rawData = atob(data);
+  var rawLength = rawData.length;
+  var array = new Uint8Array(new ArrayBuffer(rawLength));
+
+  for(let i = 0; i < rawLength; i++) {
+    array[i] = rawData.charCodeAt(i);
+  }
+
+  return array
+}
+
 async function getCaPublicKey() {
   const caUrl = process.env.NEXT_PUBLIC_CA_URL + '/v1/info/pk';
   const resp = await fetch(caUrl, {
@@ -33,7 +47,8 @@ async function getCaPublicKey() {
   const data = await resp.json();
   const publicKeyPem = data.public_key;
   const publicKeyBase64 = publicKeyPem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
-  const publicKeyBytes = Uint8Array.fromBase64(publicKeyBase64);
+  // const publicKeyBytes = Uint8Array.fromBase64(publicKeyBase64);
+  const publicKeyBytes = bytesFromBase64(publicKeyBase64);
 
   return crypto.subtle.importKey(
     'spki', publicKeyBytes,
@@ -80,7 +95,8 @@ export async function signedResponseIsValid(response) {
   const responseData = response.response_data;
   const responseDataStr = JSON.stringify(responseData);
   const responseDataEncoded = (new TextEncoder()).encode(responseDataStr);
-  const signatureBytes = Uint8Array.fromBase64(response.signature);
+  // const signatureBytes = Uint8Array.fromBase64(response.signature);
+  const signatureBytes = bytesFromBase64(response.signature);
   const signatureDer = derToJose(signatureBytes);
 
   return await window.crypto.subtle.verify(
