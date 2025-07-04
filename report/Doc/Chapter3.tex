@@ -66,23 +66,17 @@ flows, cryptographic operations, and component interactions for each phase.
 \subsection{Phase 1: identity commitment}
 
 The certificate issuance process begins with an identity commitment phase that 
-establishes and verifies user identity through a secure multi-step protocol.
+establishes and verifies user identity through a multi-step protocol.
 
 \subsubsection{Client-side operations}
 
-The process initiates when a user accesses the certificate request interface. 
-The client application, running in the browser, generates a new cryptographic 
-key pair using the Web Crypto API. 
-
-The client extracts the public key from the generated pair and formats it as 
-a PEM-encoded certificate signing request. Along with the user's email address 
-and selected key type, this information forms the identity commitment request.
+The user commits their identity by sending their public key, PEM-encoded,
+along with their email address.
 
 \subsubsection{CA backend processing}
 
-When the CA backend receives the commitment request at the `/commit-identity` 
-endpoint, it performs comprehensive validation:
-
+When the CA backend receives the commitment request at the `/v1/identity` 
+endpoint, it performs comprehensive validation.
 The system validates the email address format using standard RFC 5322 compliance 
 checking. The public key undergoes cryptographic validation 
 to ensure it is valid and properly formatted.
@@ -98,9 +92,8 @@ re-committed. In addition, it's not possible to verify the same identity twice.
 \subsubsection{Email verification}
 
 The identity verification process leverages email ownership as proof of identity. 
-The CA's email service sends the challenge string to the user's provided email 
+The CA's email service sends the challenge string, encoded in base 64, to the user's provided email 
 address using a secure email delivery service.
-
 This email-based verification serves dual purposes: it confirms the user has 
 access to the claimed email address and provides the challenge string needed 
 for the subsequent cryptographic proof phase.
@@ -115,7 +108,6 @@ ownership before the CA will issue a certificate.
 After receiving the challenge via email, the user returns to the certificate 
 interface and provides the challenge string. The client application retrieves 
 the challenge and prompts the user to sign it using their private key.
-
 The signing operation occurs entirely within the browser using the Web Crypto API. 
 The client signs the raw challenge bytes using the private key corresponding to 
 the public key submitted during commitment. This creates a digital signature 
@@ -124,12 +116,10 @@ that proves the user possesses the private key without exposing it.
 \subsubsection{CA verification and certificate issuance}
 
 The CA receives the challenge response containing the challenge string and the 
-cryptographic signature. The system performs several critical verification steps:
-
+cryptographic signature. The system performs several critical verification steps.
 First, the CA retrieves the identity commitment record using the provided challenge. 
 It verifies the commitment hasn't expired and hasn't been previously used, 
 preventing replay attacks and ensuring temporal validity.
-
 Next, the CA performs signature verification using the public key from the 
 commitment record. This cryptographic verification proves the requester possesses 
 the corresponding private key. The verification process uses the appropriate 
@@ -145,12 +135,10 @@ extensions such as key usage, basic constraints, and subject alternative names.
 The certificate signing operation represents the most security-critical component 
 of the entire system. The CA never signs certificates using local private keys; 
 instead, all signing operations occur within the Hardware Security Module.
-
 The CA formats the certificate structure and sends it to the HSM through the 
 AWS KMS API. The HSM performs the cryptographic signing operation using the 
 CA's root private key, which never leaves the secure hardware boundary. This 
 approach ensures the highest level of security for the CA's signing operations.
-
 The HSM returns the signature, which the CA combines with the certificate data 
 to produce the final signed X.509 certificate. The completed certificate is 
 returned to the client in PEM format, ready for immediate use.
@@ -167,18 +155,17 @@ The revocation process begins when a certificate owner accesses the revocation
 interface and provides their certificate's serial number. The system requires 
 cryptographic proof that the requester owns the certificate's corresponding 
 private key.
-
 The client constructs a revocation message in the format "Revoke: $<$serial number$>$" 
 where the serial number matches the certificate being revoked. The user signs 
 this message using their private key, creating a revocation signature that 
-proves their authority to revoke the certificate.
+proves their authority to revoke the certificate. A nonce is not required in this
+case because the operation can be performed only once per certificate.
 
 \subsubsection{CA revocation processing}
 
 The CA receives the revocation request containing the serial number and signature. 
 The system retrieves the original identity commitment record associated with 
 the serial number to obtain the corresponding public key.
-
 The CA verifies the revocation signature against the constructed message 
 "Revoke: $<$serial number$>$" using the certificate's public key. This verification 
 ensures only the legitimate certificate owner can initiate revocation.
@@ -211,7 +198,7 @@ The CA performs several validation steps before processing renewal requests.
 First, the system verifies the certificate exists and hasn't been revoked. It confirms 
 the certificate hasn't expired, as expired certificates cannot be renewed. 
 The, the CA validates the renewal signature against the message "Renew: $<$serial number$>$ Nonce: 
-$<$provided nonce$>$" using the certificate's public key.
+$<$provided nonce$>$" using the committed public key.
 Upon successful validation, the CA extends the certificate's validity period 
 (typically by one year) and generates a new certificate with the updated expiration 
 date. It also keeps track of the used nonces for this certificate to prevent 
@@ -224,7 +211,6 @@ information while reflecting the extended validity period.
 Similar to initial certificate issuance, the renewal process involves HSM-based 
 signing operations. The CA constructs the renewed certificate structure and 
 submits it to the HSM for signing using the root private key.
-
 This ensures renewed certificates maintain the same level of cryptographic 
 integrity as originally issued certificates, with all signing operations 
 occurring within the secure hardware boundary.
@@ -238,12 +224,10 @@ certificate operations, emphasizing the role of the HSM and signed responses.
 
 The web interface communicates with the CA backend through RESTful API endpoints, 
 with each operation following specific message flow patterns.
-
 The process starts with the identity commitment flow, where the frontend sends a POST request to 
-`/v1/identity` containing the user's email, public key in PEM format, and 
-selected key type. The backend responds with an HTTP 200 status upon successful 
+`/v1/identity` containing the user's email and public key in PEM format. The backend responds with an HTTP 200 status upon successful 
 commitment creation, triggering the email verification process.
-Then, once the use has received the challenge via email and wrote it into the `Sign` section
+Then, once the user has received the challenge via email and wrote it into the `Sign` section
 together with the associate private key, the frontend computes the required signature and submits 
 a POST request to `/v1/certificate` with the challenge string and signature. 
 The backend validates the signature and returns the signed certificate in PEM format.
@@ -254,8 +238,8 @@ The backend validates the signature and returns the signed certificate in PEM fo
     \label{fig:certificate-creation-flow}
 \end{figure}
 When a user wants to revoke a certificate, the frontend sends a POST request to 
-`/v1/certificate/revoke` containing the revocation signature. The backend validates 
-the signature and confirms revocation through a JSON response.
+`/v1/certificate/revoke` containing the serial number of the certificate and the revocation 
+signature. The backend validates the signature and confirms revocation through a JSON response.
 
 \begin{figure}[h!]
     \centering
@@ -263,7 +247,6 @@ the signature and confirms revocation through a JSON response.
     \caption{Certificate revocation flow}
     \label{fig:certificate-revocation-flow}
 \end{figure}
-
 Similarly, when a user wants to renew a certificate, the frontend sends a POST 
 requests to `/v1/certificate/renew` containing renewal signatures and the serial number of the 
 certificate. Successful renewal returns both confirmation and the renewed certificate.
@@ -389,8 +372,7 @@ we decided to use.
 At the core we decided to use Next.js 15 with React 19 as it provides easy routing and
 lots of UI packages with pre-built components, which allowed us to speed up the development process.
 We opted for Web Crypto API (browser native) to handle 
-client-side key generation, signing, and certificate validation without requiring 
-external cryptographic libraries.
+client-side cryptographic operations without requiring external libraries.
 
 \subsection{Infrastructure dependencies}
 
@@ -406,7 +388,6 @@ for development and testing environments without requiring cloud resources, but 
 All selected dependencies prioritize security and maintain active development 
 with regular security updates. The minimal dependency approach reduces attack 
 surface while leveraging proven, well-maintained libraries from reputable sources. 
-
 Cryptographic operations rely primarily on standard library implementations 
 and certified hardware modules rather than third-party cryptographic libraries, 
 ensuring compliance with security standards and reducing implementation risks.

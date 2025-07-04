@@ -19,7 +19,6 @@ identity of the certificate requester. This includes:
     \item Verifying the authenticity of certificate requests
     \item Generating X.509 compliant certificates
 \end{itemize}
-
 Certificate issuance is the foundation of a certificate authority, 
 requiring identity verification to prevent unauthorized issuance.
 
@@ -33,7 +32,6 @@ particularly when suspecting private key compromise. The system shall:
     \item Verify proof of private key ownership before processing revocation
     \item Immediately update the certificate status upon successful verification
 \end{itemize}
-
 This capability ensures certificate holders maintain control over their 
 digital identities and can respond quickly to security incidents.
 
@@ -47,7 +45,6 @@ anyone to verify certificate status. Requirements include:
     \item Providing public access to CRL information
     \item Digitally signing the CRL to ensure authenticity
 \end{itemize}
-
 Public CRL access enables relying parties to perform proper certificate validation.
 
 \subsection{FR4: Identity verification}
@@ -59,7 +56,6 @@ certificate applicants. This simplified verification process includes:
     \item Email verification through challenge-response mechanisms
     \item Private key ownership verification via cryptographic challenges
 \end{itemize}
-
 This approach provides reasonable assurance that certificate requests come 
 from legitimate key-holders controlling the specified email addresses.
 
@@ -73,8 +69,7 @@ certificate validation. This requires:
     \item Publishing the CA's public key as a trust anchor
     \item Providing standard interfaces for certificate retrieval
 \end{itemize}
-
-Public availability of certificates and the CA public key enables the complete 
+Public availability of the CA public key enables the complete 
 certificate validation process for all relying parties.
 
 \subsection{FR6: Certificate renewal}
@@ -84,10 +79,9 @@ continuity. The renewal process shall:
 
 \begin{itemize}
     \item Verify the current certificate has not been revoked
-    \item Perform identity verification equivalent to initial issuance
+    \item Perform cryptographic verifications equivalent to initial issuance
     \item Ensure proper timing to prevent service interruptions
 \end{itemize}
-
 Renewal maintains trust relationships beyond individual certificate lifespans 
 while preserving security through re-verification.
 
@@ -101,7 +95,6 @@ broad compatibility:
     \item ECDSA support using the P-256 curve
     \item Key generation, signing, and verification for both algorithms
 \end{itemize}
-
 Multi-algorithm support accommodates diverse client requirements and provides 
 flexibility for different security and performance needs.
 
@@ -121,7 +114,6 @@ trustworthy. This requires:
     \item Secure certificate signing procedures
     \item Readily available signature verification mechanisms
 \end{itemize}
-
 Certificate authenticity forms the foundation of PKI trust, enabling relying 
 parties to confidently validate certificate legitimacy.
 
@@ -135,7 +127,6 @@ regardless of signature authenticity. Validation must include:
     \item CRL consultation for revocation status
     \item Clear rejection of certificates failing either test
 \end{itemize}
-
 Comprehensive validity checking prevents acceptance of certificates that may 
 pose security risks despite technical authenticity.
 
@@ -148,25 +139,9 @@ with the following protections:
     \item Tamper-resistant hardware storage
     \item Protection against unauthorized access and extraction
     \item All signing operations performed within the HSM boundary
-    \item Comprehensive audit trails of key usage
 \end{itemize}
-
 HSM protection ensures the CA private key, the most critical PKI asset, 
 remains secure against various attack vectors.
-
-\subsection{SR4: Data integrity and confidentiality}
-
-All certificate data, configuration, and audit logs must be protected against 
-unauthorized access and modification:
-
-\begin{itemize}
-    \item Database encryption for stored information
-    \item Secure communication protocols for data transmission
-    \item Access controls and integrity checking mechanisms
-\end{itemize}
-
-Data protection ensures certificate information remains accurate and prevents 
-inappropriate disclosure of sensitive information.
 
 These requirements collectively define the functional capabilities and security 
 posture necessary for effective and secure Certificate Authority operations.
