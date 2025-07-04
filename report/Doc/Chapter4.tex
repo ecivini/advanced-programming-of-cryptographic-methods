@@ -52,7 +52,7 @@ with real-time availability checking.
 The revocation mechanism lacks reason codes that specify the cause of the revocation events, 
 limiting incident response capabilities. Because of the same reason, the system provides no mechanism 
 for CA-initiated revocation, creating problems when certificates need revocation due to external 
-threats but certificate holders are unavailable.
+threats, but certificate holders are unavailable.
 
 This problem can be addressed by extending the revocation mechanism to include reason codes that specify 
 the cause of the revocation events, and by implementing a mechanism for the CA to initiate revocation 
@@ -77,7 +77,7 @@ the CA cannot generate hybrid certificates that provide both current ECDSA compa
 and quantum resistance.
 
 To address this issue, it is enough to use a production HSM that supports post-quantum algorithms, such as AWS KMS,
-but unfortunately there is not free plan to use it.
+but unfortunately there is no free plan to use it.
 
 \section{Use of custom JSON-based OCSP responses}
 
@@ -86,4 +86,4 @@ for this MVP. These responses try to emulate the ones in RFC 6960 \cite{rfc6960}
 specified cases due to time constraints.
 Because of this, a significant future improvement would be to use ASN.1 OCSP responses, making this 
 implementation more compatible with the already existing PKI ecosystem. Considering that the core 
-functionalities of OCSP are already implemented, this change should not require signficant effort.
+functionalities of OCSP are already implemented, this change should not require significant effort.

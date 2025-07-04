@@ -32,8 +32,8 @@ is not able to revoke certificate on behalf of the certificate holder.
 
 \section{System scalability}
 
-The system is implemented as a single-instance application without cosnidering scaling solutions, which
-would improve availability and overall security. In particular, a signficant improvement would be
+The system is implemented as a single-instance application without considering scaling solutions, which
+would improve availability and overall security. In particular, a significant improvement would be
 to use a clustered HSM deployment, which would allow the CA to continue operating even if one of the HSMs
 fails or is under maintenance, and to use threshold cryptography, which would allow the CA to distribute
 the signing operations across multiple HSMs.
@@ -44,7 +44,7 @@ While the system implements main operations for managing X.509 standards, it lac
 with advanced PKI standards, in particular tries replicate RFC 5280 and RFC 6960 in a simplified way.
 
 \section{Requiring internet access for all operations}
-As our CA is implemented to be real-time, it does provide certificate revokation list files. This means 
+As our CA is implemented to be real-time, it does provide certificate revocation list files. This means 
 that it is not possible to verify the status of a certificate without access to the internet, in contrast 
 to what happens within RFC 5280, which allows to download the CRL file beforehand and verify the status 
 of a certificate without requiring internet access, since it is able to cache CRL files and use them for 

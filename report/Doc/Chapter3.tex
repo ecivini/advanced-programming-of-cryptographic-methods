@@ -29,7 +29,7 @@ metadata requirements. It also provides indexing capabilities for efficient
 querying and retrieval of certificate data.
 
 \subsection{Hardware Security Module (HSM)}
-We decided to use an HSM, in particulare an emulated version of AWS KMS, to ensure that all CA 
+We decided to use an HSM, in particular an emulated version of AWS KMS, to ensure that all CA 
 cryptographic operations requiring its private key occur within FIPS 140-2 Level 3 certified hardware. 
 This design decision eliminates the risk of private key exposure while providing 
 enterprise-grade security and audit capabilities.
@@ -387,7 +387,7 @@ we decided to use.
 \subsection{Frontend dependencies}
 
 At the core we decided to use Next.js 15 with React 19 as it provides easy routing and
-lots of ui packages with pre-built compotents, which allowed us to speed up the development process.
+lots of UI packages with pre-built components, which allowed us to speed up the development process.
 We opted for Web Crypto API (browser native) to handle 
 client-side key generation, signing, and certificate validation without requiring 
 external cryptographic libraries.
