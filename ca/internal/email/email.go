@@ -88,10 +88,10 @@ func (e *EmailService) send(ctx context.Context, to, subject, body string) (stri
 	// If the client supports context:
 	sent, err := e.Client.Emails.SendWithContext(ctx, params)
 	if err != nil {
-		return "", fmt.Errorf("failed to send email to %s: %w", to, err)
+		return "", fmt.Errorf("failed to send email: %w", err)
 	}
 
-	log.Printf("[+] Email sent to %s | ID: %s", to, sent.Id)
+	log.Printf("[+] Email sent | ID: %s", sent.Id)
 	return sent.Id, nil
 }
 
