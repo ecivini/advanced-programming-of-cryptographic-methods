@@ -7,8 +7,6 @@ deploy and test the system in their own environments.
 \section{Software prerequisites}
 
 The following software must be installed on the target system:
-
-\textbf{Required software:}
 \begin{itemize}
     \item \textbf{Operating System}: Linux, macOS, or Windows with WSL2 (tested on Linux)
     \item \textbf{Docker}: Version 28.0 or higher (tested with 28.3)
@@ -41,7 +39,8 @@ $ cd advanced-programming-of-cryptographic-methods
 
 \subsection{Configuration}
 If you have downloaded the project as a zip archive, you will find a \texttt{.env} already populated
-with the necessary configuration values.
+with the necessary configuration values, and an \texttt{EMAIL\_CREDENTIALS.md} file with the email credentials for 
+the Gmail account associated to the Resend account specified in the \texttt{.env} file.
 On the other hand, if you have set up the environment using the git approach, you need to create a new
 \texttt{.env} file in the project root directory with the following configuration:
 \begin{verbatim}
@@ -120,11 +119,9 @@ openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:409
 openssl ecparam -name prime256v1 -genkey -noout -out private_key.pem
     \end{verbatim}
 \end{itemize}
-
 After generating the private key, the corresponding public key can be extracted with:
 
 \begin{verbatim}
 openssl pkey -in private_key.pem -pubout -out public_key.pem
 \end{verbatim}
-
 Make sure to store \texttt{private\_key.pem} securely, as it grants access to all operations requiring your identity.
